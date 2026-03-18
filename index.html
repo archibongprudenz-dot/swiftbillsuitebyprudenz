@@ -1,0 +1,1590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftBill by Prudenz - Professional Billing Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Added Chart.js for Visual Graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+        .receipt-shadow { box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.15); }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; padding: 0; margin: 0; }
+            .print-area { border: none !important; box-shadow: none !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+            @page { margin: 1cm; orientation: portrait; }
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .modal-overlay { backdrop-filter: blur(8px); background-color: rgba(15, 23, 42, 0.6); }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+       
+        #notification-toast {
+            transform: translate(-50%, 100px);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0;
+            pointer-events: none;
+        }
+        #notification-toast.show {
+            transform: translate(-50%, 0);
+            opacity: 1;
+        }
+
+        .tab-active {
+            background-color: #4f46e5 !important;
+            color: white !important;
+            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4);
+        }
+
+        .scroll-ctrl {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            gap: 16px;
+            padding: 20px 0;
+            margin-top: 10px;
+        }
+        .scroll-btn {
+            width: 44px;
+            height: 44px;
+            background: #1e293b;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .scroll-btn:hover { background: #4f46e5; transform: translateY(-2px); }
+        .scroll-btn:active { transform: translateY(0); }
+
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            background: white;
+            border-radius: 1.5rem;
+            position: relative;
+        }
+       
+        .excel-table { border-collapse: collapse; border: 1px solid #e2e8f0; width: 100%; }
+        .excel-table th, .excel-table td { border: 1px solid #e2e8f0; padding: 12px; }
+        .excel-table th { background-color: #f8fafc; font-weight: 800; font-size: 10px; text-transform: uppercase; color: #64748b; }
+       
+        .capture-preparing {
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -10000px !important;
+            z-index: 9999 !important;
+            background: white !important;
+        }
+
+        /* Logic for Report Heading visibility during export */
+        #expense-report-header, #customer-export-header { display: none; }
+        .capture-preparing #expense-report-header,
+        .capture-preparing #customer-export-header { display: block !important; }
+
+        .receipt-heading {
+            display: block;
+            text-align: center;
+            font-weight: 900;
+            font-size: 12px;
+            letter-spacing: 0.3em;
+            color: #1e1b4b;
+            border-bottom: 2px solid #1e1b4b;
+            padding-bottom: 4px;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+        }
+        .insight-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        .insight-card:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -10px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col relative">
+
+    <datalist id="customer-suggestions"></datalist>
+
+    <!-- Repaired Debt Payment Modal -->
+    <div id="payment-modal" class="fixed inset-0 z-[190] hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <!-- Fixed Header -->
+            <div class="p-6 border-b flex justify-between items-center bg-emerald-50/50 flex-shrink-0">
+                <h3 class="text-lg font-black uppercase text-emerald-950">Record Debt Payment</h3>
+                <button onclick="togglePaymentModal(false)" class="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+
+            <!-- PINNED BALANCE SECTION: Always visible even when entry scrolls -->
+            <div class="bg-slate-50 px-8 py-5 border-b shadow-sm flex-shrink-0">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1 min-w-0">
+                        <div id="pay-receipt-id" class="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">---</div>
+                        <div id="pay-client-name" class="text-sm font-black text-indigo-900 uppercase truncate pr-4 leading-tight">---</div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <label id="pay-balance-label" class="text-[8px] font-black uppercase text-slate-400 block mb-0.5 tracking-tight">Outstanding Balance</label>
+                        <div id="pay-total-owed" class="text-2xl font-black text-rose-600 leading-none">₦0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCROLLABLE CONTENT AREA -->
+            <div class="flex-1 overflow-y-auto p-8 space-y-6 scroll-smooth no-scrollbar">
+                <div id="payment-modal-scroll" class="space-y-6">
+                    <div class="grid grid-cols-2 gap-4 border-b pb-6">
+                        <div>
+                            <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">Total Purchase</label>
+                            <div id="pay-total-purchase" class="text-sm font-black text-slate-800">₦0.00</div>
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">Amount Paid So Far</label>
+                            <div id="pay-amount-paid-sum" class="text-sm font-black text-emerald-600">₦0.00</div>
+                        </div>
+                    </div>
+                   
+                    <div class="space-y-5">
+                        <div>
+                            <label class="text-[10px] font-black uppercase text-indigo-600 block mb-1.5">Enter Payment Amount</label>
+                            <input type="number" id="pay-amount" placeholder="0.00" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-4 font-black text-xl outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase text-slate-400 block mb-1.5">Payment Method</label>
+                            <select id="pay-method" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-sm outline-none">
+                                <option value="CASH">Cash</option>
+                                <option value="POS">POS</option>
+                                <option value="BANK">Bank Transfer</option>
+                            </select>
+                        </div>
+                    </div>
+                   
+                    <div class="h-4"></div>
+                </div>
+            </div>
+
+            <!-- Fixed Footer Buttons -->
+            <div class="p-6 bg-white border-t flex flex-col gap-3 flex-shrink-0">
+                <button onclick="confirmDebtPayment()" class="w-full py-4 bg-emerald-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-emerald-700 transition-all active:scale-[0.98]">Confirm & Save Payment</button>
+                <button onclick="togglePaymentModal(false)" class="w-full py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 transition-colors">Close / Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification-toast" class="fixed bottom-24 left-1/2 z-[200] bg-slate-900 text-white px-6 py-4 rounded-2xl flex items-center gap-4 shadow-2xl no-print">
+        <div class="bg-emerald-500 rounded-full p-1.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg></div>
+        <span class="text-xs font-bold" id="toast-message">Success</span>
+    </div>
+
+    <!-- Close Day Summary Modal -->
+    <div id="close-day-summary-modal" class="fixed inset-0 z-[180] hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white w-full max-w-6xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[98vh]">
+            <div class="p-4 border-b flex justify-between items-center bg-indigo-900 text-white">
+                <h3 class="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                    <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                    Business Intelligence Dashboard
+                </h3>
+                <button onclick="toggleCloseDaySummary(false)" class="p-2 hover:bg-white/10 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+           
+            <div id="close-day-capture-area" class="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50 space-y-8 no-scrollbar">
+                <div id="cds-info-bar" class="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-[2rem] border shadow-sm gap-4">
+                    <div class="text-center md:text-left">
+                        <h2 id="cds-comp-name" class="text-2xl font-black text-indigo-950 uppercase tracking-tight">---</h2>
+                        <p id="cds-date" class="text-[10px] font-black tracking-widest text-slate-400 uppercase">---</p>
+                    </div>
+                    <div id="cds-status-pill" class="px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest">
+                        Status: <span id="cds-status-text">---</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="insight-card p-6 bg-gradient-to-br from-indigo-600 to-indigo-700 text-white">
+                                <span class="text-[9px] font-bold uppercase opacity-60">Revenue Performance (Total Sales)</span>
+                                <div id="cds-total-sales" class="text-3xl font-black mt-2">₦0.00</div>
+                                <div class="mt-4 flex justify-between text-[9px] font-black uppercase opacity-70">
+                                    <span>Txns: <span id="cds-txn-count" class="text-white">0</span></span>
+                                    <span>Avg: <span id="cds-avg-val" class="text-white">₦0.00</span></span>
+                                </div>
+                            </div>
+                            <div class="insight-card p-6 bg-gradient-to-br from-rose-500 to-rose-600 text-white">
+                                <span class="text-[9px] font-bold uppercase opacity-60">Total Expenditure (Expenses)</span>
+                                <div id="cds-total-expenses" class="text-3xl font-black mt-2">₦0.00</div>
+                                <div class="mt-4 text-[7px] font-black uppercase opacity-90 bg-black/20 p-2 rounded-lg">
+                                    CALC: <span id="cds-calc-formula">Sales – Expenses = Outcome</span>
+                                    <div class="mt-1 text-[10px] font-black">RESULT: <span id="cds-net-result" class="text-white ml-1">₦0.00</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                             <div class="bg-white p-4 rounded-2xl border text-center">
+                                <span class="text-[8px] font-black uppercase text-slate-400 block mb-1">Cash Received</span>
+                                <div id="cds-cash-received" class="text-xs font-black text-emerald-600">₦0.00</div>
+                             </div>
+                             <div class="bg-white p-4 rounded-2xl border text-center">
+                                <span class="text-[8px] font-black uppercase text-slate-400 block mb-1">POS Received</span>
+                                <div id="cds-pos-received" class="text-xs font-black text-sky-600">₦0.00</div>
+                             </div>
+                             <div class="bg-white p-4 rounded-2xl border text-center">
+                                <span class="text-[8px] font-black uppercase text-slate-400 block mb-1">Transfer Received</span>
+                                <div id="cds-bank-received" class="text-xs font-black text-violet-600">₦0.00</div>
+                             </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-white p-4 rounded-[2rem] border shadow-sm">
+                                <h5 class="text-[10px] font-black uppercase text-slate-400 mb-4 px-2">Payment Channels</h5>
+                                <canvas id="paymentChart" style="max-height: 200px;"></canvas>
+                            </div>
+                            <div class="bg-white p-4 rounded-[2rem] border shadow-sm">
+                                <h5 class="text-[10px] font-black uppercase text-slate-400 mb-4 px-2">Performance Ratio</h5>
+                                <canvas id="performanceChart" style="max-height: 200px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-6">
+                        <div class="bg-white p-6 rounded-[2.5rem] border shadow-sm space-y-5">
+                            <h4 class="text-xs font-black uppercase text-indigo-900 border-b pb-3 tracking-widest">Business Highlights</h4>
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" stroke-width="3"/></svg>
+                                </div>
+                                <div>
+                                    <span class="text-[8px] font-black text-slate-400 uppercase">Highest Sale</span>
+                                    <div id="cds-high-sale" class="text-sm font-black text-slate-800">₦0.00</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" stroke-width="3"/></svg>
+                                </div>
+                                <div>
+                                    <span class="text-[8px] font-black text-slate-400 uppercase">Most Popular Item</span>
+                                    <div id="cds-most-sold" class="text-sm font-black text-slate-800 truncate max-w-[140px]">---</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2.5"/></svg>
+                                </div>
+                                <div>
+                                    <span class="text-[8px] font-black text-slate-400 uppercase">VAT Collected</span>
+                                    <div id="cds-total-vat" class="text-sm font-black text-slate-800">₦0.00</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-[2.5rem] text-white shadow-xl">
+                            <h4 class="text-[9px] font-black uppercase text-indigo-400 mb-4 tracking-widest">Portfolio Balances</h4>
+                            <div class="space-y-4">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] font-bold opacity-60">Owing Customers</span>
+                                    <div id="cds-total-outstanding" class="text-sm font-black text-amber-400">₦0.00</div>
+                                </div>
+                                <div class="flex justify-between items-center pt-3 border-t border-white/10">
+                                    <span class="text-[10px] font-bold opacity-60">Customer Credits</span>
+                                    <div id="cds-total-credit" class="text-sm font-black text-emerald-400">₦0.00</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pt-6 border-t border-dashed border-slate-300 text-center opacity-40">
+                    <p class="text-[8px] font-black uppercase tracking-[0.3em]">SwiftBill Suite • Powered by Prudenz Archibong</p>
+                </div>
+            </div>
+            <div class="p-6 bg-white border-t flex flex-col sm:flex-row gap-3 no-print">
+                <button onclick="window.downloadPNG('close-day-capture-area', 'Business Dashboard')" class="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-all hover:bg-indigo-700">PNG Dashboard</button>
+                <button onclick="window.downloadPDF('close-day-capture-area', 'Business Report')" class="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-all hover:bg-rose-700">PDF Report</button>
+                <button onclick="window.print()" class="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-all hover:bg-slate-950">Print Report</button>
+                <button onclick="window.shareOnPhone('close-day-capture-area', 'Business Insights')" class="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-all hover:bg-emerald-700">Share Results</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="no-print bg-white border-b border-slate-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center justify-between w-full sm:w-auto gap-3 flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="bg-indigo-600 p-2 rounded-xl shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-black tracking-tight text-slate-800 leading-none">SwiftBill</h1>
+                        <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">by Prudenz</p>
+                    </div>
+                </div>
+                <div class="flex flex-col items-end text-indigo-900 pr-2 border-l border-slate-100 pl-4">
+                    <div id="live-clock" class="text-[11px] sm:text-sm font-black tracking-tighter tabular-nums leading-none">00:00:00 AM</div>
+                    <div id="live-date" class="text-[7px] sm:text-[9px] font-bold opacity-50 uppercase mt-0.5">---</div>
+                </div>
+            </div>
+            <div class="w-full sm:w-auto flex bg-slate-100 p-1 rounded-2xl overflow-x-auto no-scrollbar">
+                <div class="flex flex-wrap justify-center gap-1">
+                    <button id="nav-generator" onclick="switchTab('generator')" class="whitespace-nowrap px-4 py-2.5 rounded-xl text-[11px] font-bold transition-all">Receipt Generator</button>
+                    <button id="nav-records" onclick="switchTab('records')" class="whitespace-nowrap px-4 py-2.5 rounded-xl text-[11px] font-bold transition-all text-slate-500">Sales Records</button>
+                    <button id="nav-expenses" onclick="switchTab('expenses')" class="whitespace-nowrap px-4 py-2.5 rounded-xl text-[11px] font-bold transition-all text-slate-500">Business Expenses</button>
+                    <button id="nav-close-day" onclick="switchTab('close-day')" class="whitespace-nowrap px-4 py-2.5 rounded-xl text-[11px] font-bold transition-all text-slate-500">Close of Day Screen</button>
+                    <button id="nav-credits" onclick="switchTab('credits')" class="whitespace-nowrap px-4 py-2.5 rounded-xl text-[11px] font-bold transition-all text-slate-500">Debts & Credits</button>
+                    <button id="nav-customers" onclick="switchTab('customers')" class="whitespace-nowrap px-4 py-2.5 rounded-xl text-[11px] font-bold transition-all text-slate-500">Customer Database</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-1">
+        <div class="max-w-7xl mx-auto px-4 py-6 md:py-10 pb-24">
+           
+            <!-- Tab Generator -->
+            <div id="tab-generator" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-7 space-y-6 no-print">
+                    <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                        <h2 class="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-4">Business Profile</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="text" id="company-name" placeholder="Company Name" oninput="updateReceiptID(); updatePreview();" class="w-full bg-slate-50 rounded-xl px-4 py-3 border text-sm font-semibold outline-none">
+                            <input type="text" id="company-phone" placeholder="Phone Number" oninput="updatePreview()" class="w-full bg-slate-50 rounded-xl px-4 py-3 border text-sm font-semibold outline-none">
+                            <input type="text" id="staff-name" placeholder="Staff / Officer Name" oninput="updatePreview()" class="w-full bg-slate-50 rounded-xl px-4 py-3 border text-sm font-semibold outline-none">
+                            <input type="text" id="company-address" placeholder="Address" oninput="updatePreview()" class="md:col-span-1 w-full bg-slate-50 rounded-xl px-4 py-3 border text-sm font-semibold outline-none">
+                            <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                                <div class="flex gap-1">
+                                    <button onclick="document.getElementById('logo-upload').click()" class="flex-1 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold text-[10px] uppercase">Upload Logo</button>
+                                    <button id="remove-logo-btn" onclick="removeBranding('logo')" class="hidden bg-rose-50 text-rose-600 px-3 rounded-xl font-bold text-xs" title="Remove Logo">×</button>
+                                </div>
+                                <input type="file" id="logo-upload" accept="image/*" onchange="handleBrandingUpload('logo', this)" class="hidden">
+                                <div class="flex gap-1">
+                                    <button onclick="document.getElementById('sig-upload').click()" class="flex-1 bg-indigo-50 text-indigo-600 py-3 rounded-xl font-bold text-[10px] uppercase">Upload Signature</button>
+                                    <button id="remove-sig-btn" onclick="removeBranding('sig')" class="hidden bg-rose-50 text-rose-600 px-3 rounded-xl font-bold text-xs" title="Remove Signature">×</button>
+                                </div>
+                                <input type="file" id="sig-upload" accept="image/*" onchange="handleBrandingUpload('sig', this)" class="hidden">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                        <h2 class="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-4">Customer & Reference Details</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="md:col-span-2">
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="text-[9px] font-black uppercase text-indigo-400 block">Receipt Reference # (Retrieve Existing Debt/Credit)</label>
+                                    <div id="credit-toggle-container" class="hidden flex items-center gap-2">
+                                        <input type="checkbox" id="use-available-credit" onchange="updatePreview()" class="w-4 h-4 rounded border-slate-300">
+                                        <label for="use-available-credit" class="text-[8px] font-black uppercase text-emerald-600">Apply Available Credit</label>
+                                    </div>
+                                </div>
+                                <input type="text" id="ref-receipt-id" placeholder="e.g. SB.BusinessName.0001" oninput="handleReceiptRefInput()" class="w-full bg-indigo-50/50 border-indigo-100 rounded-xl px-4 py-3 border text-sm font-black outline-none focus:ring-2 focus:ring-indigo-600">
+                            </div>
+                            <input type="text" id="cust-name" list="customer-suggestions" placeholder="Client Name" oninput="handleCustomerInput()" class="w-full bg-slate-50 rounded-xl px-4 py-3 border text-sm font-semibold outline-none">
+                            <input type="text" id="cust-phone" placeholder="Phone Number" oninput="updatePreview()" class="w-full bg-slate-50 rounded-xl px-4 py-3 border text-sm font-semibold outline-none">
+                            <textarea id="cust-address" placeholder="Address" oninput="updatePreview()" rows="2" class="md:col-span-2 w-full bg-slate-50 rounded-xl px-4 py-3 border text-sm font-semibold outline-none"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-[10px] font-black uppercase tracking-widest text-indigo-600">Items (Auto-Calculating Rows)</h2>
+                            <div class="flex items-center gap-4">
+                                <div class="text-right">
+                                    <span class="text-[8px] font-black text-slate-400 uppercase">Subtotal</span>
+                                    <div id="live-total-display" class="text-lg font-black text-indigo-600">₦0.00</div>
+                                </div>
+                                <button onclick="addItemRow()" class="text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl font-black text-[9px] uppercase">+ Add Item</button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-12 gap-2 px-2 mb-2">
+                           <div class="col-span-5 text-[8px] font-black uppercase text-slate-400">Description</div>
+                           <div class="col-span-2 text-[8px] font-black uppercase text-slate-400 text-center">Price</div>
+                           <div class="col-span-2 text-[8px] font-black uppercase text-slate-400 text-center">Qty</div>
+                           <div class="col-span-2 text-[8px] font-black uppercase text-slate-400 text-right">Total</div>
+                           <div class="col-span-1"></div>
+                        </div>
+                        <div id="items-container" class="space-y-3"></div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                        <h2 class="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-4">Financials</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="flex gap-1">
+                                <select id="currency-select" onchange="handleCurrencyChange()" class="flex-1 bg-slate-50 rounded-xl px-4 py-3 border font-bold text-sm outline-none"></select>
+                                <button onclick="toggleCurrencyModal(true)" class="bg-indigo-50 p-2 rounded-xl text-indigo-600 font-bold">+</button>
+                            </div>
+                            <input type="number" id="discount-percent" placeholder="Discount %" oninput="calculateDiscountFromPercent()" class="bg-slate-50 rounded-xl px-4 py-3 border font-bold text-sm outline-none">
+                            <input type="number" id="discount-value" placeholder="Discount Value" oninput="calculatePercentFromValue()" class="bg-slate-50 rounded-xl px-4 py-3 border font-bold text-sm outline-none">
+                            <input type="number" id="vat-percent" placeholder="VAT %" oninput="updatePreview()" class="bg-slate-50 rounded-xl px-4 py-3 border font-bold text-sm outline-none">
+                            <select id="payment-status-select" onchange="togglePaymentMode()" class="bg-slate-50 rounded-xl px-4 py-3 border font-bold text-sm outline-none">
+                                <option value="FULL">Full Payment</option>
+                                <option value="PART">Part Payment</option>
+                                <option value="NONE">No Payment</option>
+                            </select>
+                            <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4 mt-2">
+                                <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+                                    <span class="text-[8px] font-black uppercase text-indigo-400">Total Payable</span>
+                                    <div id="summary-total-payable" class="text-sm font-black text-indigo-900">₦0.00</div>
+                                </div>
+                                <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                                    <span class="text-[8px] font-black uppercase text-emerald-600">Amount Paying</span>
+                                    <div id="summary-amount-paying" class="text-sm font-black text-emerald-800">₦0.00</div>
+                                </div>
+                                <div class="bg-rose-50 p-3 rounded-xl border border-rose-100">
+                                    <span class="text-[8px] font-black uppercase text-rose-500">Balance Owed</span>
+                                    <div id="summary-balance-owed" class="text-sm font-black text-rose-800">₦0.00</div>
+                                </div>
+                            </div>
+                            <div id="payment-inputs-container" class="md:col-span-3 grid grid-cols-3 gap-4 border-t pt-4">
+                                <input type="number" id="paid-cash" placeholder="Cash Paid" oninput="handlePaymentInputChange()" class="bg-slate-50 rounded-xl px-4 py-3 border font-black text-sm outline-none">
+                                <input type="number" id="paid-pos" placeholder="POS Paid" oninput="handlePaymentInputChange()" class="bg-slate-50 rounded-xl px-4 py-3 border font-black text-sm outline-none">
+                                <input type="number" id="paid-bank" placeholder="Bank Transfer" oninput="handlePaymentInputChange()" class="bg-slate-50 rounded-xl px-4 py-3 border font-black text-sm outline-none">
+                            </div>
+                            <div class="md:col-span-3 mt-2">
+                                <label class="text-[9px] font-black text-slate-400 uppercase mb-1 block">Receipt Footer Note</label>
+                                <textarea id="business-footer" placeholder="e.g., Thank you for your patronage!" oninput="saveFooterState()" rows="2" class="w-full bg-slate-50 rounded-xl px-4 py-3 border text-sm font-bold"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="openConfirmModal()" class="w-full bg-indigo-600 text-white font-black uppercase tracking-widest text-xs py-5 rounded-2xl shadow-xl">Confirm & Save Transaction</button>
+                </div>
+
+                <!-- Preview Column -->
+                <div class="lg:col-span-5 relative">
+                    <div class="sticky top-20">
+                        <div id="capture-zone" class="w-full max-w-[480px] mx-auto">
+                            <div class="w-full bg-white border border-slate-200 p-8 text-slate-800 receipt-shadow rounded-[3rem] overflow-hidden flex flex-col min-h-[600px]" id="receipt-paper">
+                                <div class="receipt-heading">PAYMENT RECEIPT</div>
+                                <div class="text-center mb-4">
+                                    <div id="prev-logo-container" class="mb-4 hidden"><img id="prev-logo-img" class="h-16 mx-auto object-contain"></div>
+                                    <h2 id="prev-company-name-display" class="text-lg font-black uppercase leading-tight">YOUR BUSINESS</h2>
+                                    <p id="prev-company-address-display" class="text-[9px] font-bold text-slate-500 uppercase">ADDRESS</p>
+                                    <p id="prev-company-phone-display" class="text-[9px] font-black text-indigo-600 uppercase">PHONE</p>
+                                    <div class="mt-4 text-[8px] font-black text-slate-400 uppercase tracking-widest border-y py-1 w-full flex justify-center gap-4">
+                                        <span>DATE: <span id="prev-date" class="text-slate-800">---</span></span>
+                                        <span>TIME: <span id="prev-time" class="text-slate-800">---</span></span>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4 mb-4 text-xs font-bold border-t pt-4">
+                                    <div>
+                                        <span class="text-[7px] uppercase text-indigo-400">Billed To</span>
+                                        <h4 id="prev-cust-name" class="uppercase text-[10px] leading-tight mb-1">---</h4>
+                                        <div id="prev-cust-phone" class="text-[8px] font-black text-slate-600">---</div>
+                                        <div id="prev-cust-address" class="text-[8px] text-slate-400 italic">---</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="text-[7px] uppercase text-indigo-400">Ref #</span>
+                                        <div id="receipt-id" class="text-[8px] font-black">---</div>
+                                    </div>
+                                </div>
+                                <div class="flex-1 mb-4">
+                                    <div id="prev-items-list" class="divide-y divide-slate-50"></div>
+                                </div>
+                                <div class="bg-slate-50 rounded-2xl p-4 border space-y-2 text-[10px]">
+                                    <div class="flex justify-between font-black"><span>Subtotal</span><span id="prev-subtotal">---</span></div>
+                                   
+                                    <!-- Part A: Carryover Display Logic -->
+                                    <div id="prev-ref-balance-row" class="flex justify-between text-rose-600 font-black hidden">
+                                        <span>Previous Balance Carried Forward</span>
+                                        <span id="prev-ref-balance-val">---</span>
+                                    </div>
+                                    <div id="prev-ref-credit-row" class="flex justify-between text-emerald-600 font-black hidden">
+                                        <span>Credit Balance Deducted</span>
+                                        <span id="prev-ref-credit-val">---</span>
+                                    </div>
+                                    <div id="prev-adjustment-row" class="flex justify-between text-indigo-600 font-bold hidden border-b pb-1 mb-1">
+                                        <span>Adjustment Applied</span>
+                                        <span id="prev-adjustment-val">---</span>
+                                    </div>
+
+                                    <div class="flex justify-between text-rose-500"><span>Discount</span><span id="prev-discount">---</span></div>
+                                    <div class="flex justify-between text-orange-500"><span>VAT</span><span id="prev-vat">---</span></div>
+                                    <div class="flex justify-between text-indigo-700 font-black border-t pt-2"><span>Total Payable</span><span id="prev-total">---</span></div>
+                                    <div class="flex justify-between text-emerald-600 font-bold"><span>Amount Paid</span><span id="prev-paid-val">---</span></div>
+                                   
+                                    <!-- Breakdown rows -->
+                                    <div id="prev-breakdown-cash-row" class="flex justify-between text-[8px] pl-4 italic text-slate-500 hidden border-t border-slate-100 pt-1"><span>• Cash Amount Paid</span><span id="prev-breakdown-cash-val">---</span></div>
+                                    <div id="prev-breakdown-pos-row" class="flex justify-between text-[8px] pl-4 italic text-slate-500 hidden"><span>• POS Amount Paid</span><span id="prev-breakdown-pos-val">---</span></div>
+                                    <div id="prev-breakdown-bank-row" class="flex justify-between text-[8px] pl-4 italic text-slate-500 hidden"><span>• Bank Transfer Amount Paid</span><span id="prev-breakdown-bank-val">---</span></div>
+
+                                    <div id="prev-bal-row" class="flex justify-between text-rose-600 font-black hidden"><span>Balance Owed</span><span id="prev-bal-val">---</span></div>
+                                    <div id="prev-credit-row" class="flex justify-between text-emerald-600 font-black hidden"><span>Credit Balance Created</span><span id="prev-credit-val">---</span></div>
+                                </div>
+                                <div id="prev-words-box" class="mt-3 bg-indigo-50 p-2 rounded-xl text-[7px] font-bold text-indigo-800 uppercase text-center"></div>
+                                <div class="mt-4 flex justify-between items-end">
+                                    <div id="prev-payment-pill" class="text-[6px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border">PAID</div>
+                                    <div id="prev-payment-method" class="text-[7px] font-black uppercase opacity-60">METHOD: ---</div>
+                                    <div class="text-right flex flex-col items-end">
+                                        <div id="prev-sig-container" class="mb-1 hidden"><img id="prev-sig-img" class="h-10 object-contain opacity-80"></div>
+                                        <div class="h-[1px] w-12 bg-slate-900 ml-auto mb-1"></div>
+                                        <div class="text-[6px] font-bold uppercase opacity-30">Authorized Signature</div>
+                                    </div>
+                                </div>
+                                <div id="prev-served-by-container" class="mt-2 text-[7px] font-bold text-slate-500 uppercase">You were served by: <span id="prev-served-by-name">---</span></div>
+                                <div id="prev-business-footer-text" class="mt-4 text-[7px] text-center opacity-40 font-bold italic uppercase break-words px-4"></div>
+                                <div class="mt-auto pt-6 border-t border-dashed border-slate-200">
+                                     <p class="text-[6px] text-center font-black text-slate-300 uppercase leading-relaxed tracking-widest">
+                                        Powered by SwiftBill by Prudenz | archibongprudenz@gmail.com <br>
+                                        Licensed for authorized users only. Unauthorized copying, sharing, redistribution, or resale of this receipt generator or its access link without permission may result in access termination and legal action.
+                                     </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Records -->
+            <div id="tab-records" class="hidden space-y-8">
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                    <div class="bg-indigo-600 p-4 rounded-2xl text-white shadow-sm"><span class="text-[8px] font-black uppercase opacity-60">Revenue</span><div id="stats-revenue" class="text-sm font-black truncate">₦0.00</div></div>
+                    <div class="bg-emerald-500 p-4 rounded-2xl text-white shadow-sm"><span class="text-[8px] font-black uppercase opacity-60">Cash</span><div id="stats-cash" class="text-sm font-black truncate">₦0.00</div></div>
+                    <div class="bg-sky-500 p-4 rounded-2xl text-white shadow-sm"><span class="text-[8px] font-black uppercase opacity-60">POS</span><div id="stats-pos" class="text-sm font-black truncate">₦0.00</div></div>
+                    <div class="bg-violet-500 p-4 rounded-2xl text-white shadow-sm"><span class="text-[8px] font-black uppercase opacity-60">Bank</span><div id="stats-bank" class="text-sm font-black truncate">₦0.00</div></div>
+                    <div class="bg-orange-400 p-4 rounded-2xl text-white shadow-sm"><span class="text-[8px] font-black uppercase opacity-60">VAT</span><div id="stats-vat" class="text-sm font-black truncate">₦0.00</div></div>
+                    <div class="bg-rose-50 p-4 rounded-2xl text-white shadow-sm"><span class="text-[8px] font-black uppercase opacity-60">Discount</span><div id="stats-discount" class="text-sm font-black truncate">₦0.00</div></div>
+                    <div class="bg-slate-800 p-4 rounded-2xl text-white shadow-sm"><span class="text-[8px] font-black uppercase opacity-60">Debt</span><div id="stats-debt" class="text-sm font-black truncate">₦0.00</div></div>
+                    <div class="bg-indigo-950 p-4 rounded-2xl text-white shadow-sm"><span class="text-[8px] font-black uppercase opacity-60">Count</span><div id="stats-count" class="text-sm font-black">0</div></div>
+                </div>
+                <div class="bg-white p-6 rounded-3xl border border-slate-100 flex flex-wrap items-end gap-4 no-print">
+                    <div class="flex-1 min-w-[200px]"><label class="text-[9px] font-black uppercase text-slate-400 block mb-1">Search Records</label><input type="text" id="record-search" oninput="renderHistory()" placeholder="Search Name, ID, Staff..." class="w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-xs font-bold outline-none"></div>
+                    <div><button onclick="setTodayFilter(); renderHistory();" class="bg-indigo-50 text-indigo-600 px-4 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-indigo-100">Today</button></div>
+                    <div><label class="text-[9px] font-black uppercase text-slate-400 block mb-1">From</label><input type="date" id="record-date-from" onchange="renderHistory()" class="bg-slate-50 border rounded-xl px-4 py-2 text-xs font-bold outline-none"></div>
+                    <div><label class="text-[9px] font-black uppercase text-slate-400 block mb-1">To</label><input type="date" id="record-date-to" onchange="renderHistory()" class="bg-slate-50 border rounded-xl px-4 py-2 text-xs font-bold outline-none"></div>
+                    <div class="flex gap-2 ml-auto border-l pl-4 border-slate-200">
+                        <button onclick="window.downloadPNG('records-table-wrapper', 'Sales Records')" class="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 transition-colors" title="Download PNG"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></button>
+                        <button onclick="window.downloadPDF('records-table-wrapper', 'Sales Records')" class="bg-rose-600 text-white p-2.5 rounded-xl hover:bg-rose-700 transition-colors" title="Download PDF"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg></button>
+                        <button onclick="window.print()" class="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-slate-950 transition-colors" title="Print Records"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg></button>
+                        <button onclick="exportSalesCSV()" class="bg-emerald-600 text-white p-2.5 rounded-xl hover:bg-emerald-700 transition-colors" title="Export CSV"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg></button>
+                        <button onclick="window.shareOnPhone('records-table-wrapper', 'Sales Records')" class="bg-sky-50 text-white p-2.5 rounded-xl hover:bg-sky-600 transition-colors" title="Share Mobile"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg></button>
+                    </div>
+                </div>
+                <div class="table-wrapper no-scrollbar shadow-sm border border-slate-100 rounded-[2rem]" id="records-table-wrapper">
+                    <table class="excel-table min-w-[1400px]" id="sales-records-table">
+                        <thead class="text-[8px] font-black uppercase text-slate-500 bg-slate-50">
+                            <tr><th>S/N</th><th>Date & Time</th><th>Receipt #</th><th>Customer Name</th><th>Discount</th><th>VAT</th><th class="bg-indigo-50">Total Amount</th><th class="bg-emerald-50">Amount Paid</th><th class="bg-rose-50 text-rose-600">Balance Left</th><th>Method</th><th>Account Status</th><th>Staff Name</th><th class="no-print">Actions</th></tr>
+                        </thead>
+                        <tbody id="sales-records-body" class="text-[10px] font-bold text-slate-800 bg-white"></tbody>
+                    </table>
+                </div>
+                <div class="scroll-ctrl no-print">
+                    <button onclick="scrollActiveTable(-1)" class="scroll-btn" title="Scroll Left"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"/></svg></button>
+                    <button onclick="scrollActiveTable(1)" class="scroll-btn" title="Scroll Right"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"/></svg></button>
+                </div>
+            </div>
+
+            <!-- Tab Expenses -->
+            <div id="tab-expenses" class="hidden space-y-8 animate-in fade-in duration-500">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="md:col-span-1 space-y-6">
+                        <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                            <h2 class="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-4">Record Daily Expense</h2>
+                            <div class="space-y-4">
+                                <div><label class="text-[9px] font-black text-slate-400 uppercase mb-1 block">Date</label><input type="date" id="expense-date" class="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm font-bold"></div>
+                                <div><label class="text-[9px] font-black text-slate-400 uppercase mb-1 block">Description</label><input type="text" id="expense-desc" placeholder="e.g. Fuel, Staff Lunch" class="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm font-bold"></div>
+                                <div><label class="text-[9px] font-black text-slate-400 uppercase mb-1 block">Person Who Made Expense</label><input type="text" id="expense-person" placeholder="Staff Name" class="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm font-bold"></div>
+                                <div><label class="text-[9px] font-black text-slate-400 uppercase mb-1 block">Amount</label><input type="number" id="expense-amount" placeholder="0.00" class="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm font-bold"></div>
+                                <button onclick="saveExpense()" class="w-full bg-indigo-600 text-white font-black uppercase tracking-widest text-xs py-4 rounded-2xl shadow-xl">Save Expense</button>
+                            </div>
+                        </div>
+                        <div class="bg-indigo-900 p-8 rounded-[2rem] text-white space-y-4">
+                            <div class="space-y-1"><span class="text-[10px] font-black uppercase opacity-40">Business Outlook</span><h3 class="text-lg font-black uppercase">Profit & Loss Analysis</h3></div>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="text-[9px] font-black uppercase opacity-40 mb-1 block">Start Date</label><input type="date" id="expense-range-from" onchange="renderExpenses();" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none"></div>
+                                    <div><label class="text-[9px] font-black uppercase opacity-40 mb-1 block">End Date</label><input type="date" id="expense-range-to" onchange="renderExpenses();" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none"></div>
+                                </div>
+                                <div class="bg-white/5 p-4 rounded-2xl border border-white/10"><span class="text-[9px] font-black uppercase opacity-40 block mb-1">Total Expenses for Period</span><div id="total-expense-period-display" class="text-xl font-black">₦0.00</div></div>
+                                <button id="calculate-close-day-btn" onclick="openCloseOfDaySummary()" class="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg hover:bg-emerald-600 transition-all">Show Business Dashboard</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="md:col-span-2 space-y-6">
+                        <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex-1">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-[10px] font-black uppercase tracking-widest text-indigo-600">Daily Expense Ledger</h2>
+                                <div class="flex gap-2">
+                                    <button onclick="window.downloadPNG('expense-ledger-wrapper', 'Expense Report')" class="bg-indigo-50 text-indigo-600 p-2 rounded-lg" title="Download PNG"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></button>
+                                    <button onclick="window.downloadPDF('expense-ledger-wrapper', 'Expense Report')" class="bg-rose-50 text-rose-600 p-2 rounded-lg" title="Download PDF"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg></button>
+                                    <button onclick="window.print()" class="bg-slate-50 text-slate-900 p-2 rounded-lg" title="Print Ledger"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg></button>
+                                    <button onclick="window.shareOnPhone('expense-ledger-wrapper', 'Expense Report')" class="bg-emerald-50 text-emerald-600 p-2 rounded-lg" title="Share Mobile"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/></svg></button>
+                                </div>
+                            </div>
+                            <div id="expense-ledger-wrapper" class="table-wrapper no-scrollbar bg-white p-4">
+                                <div id="expense-report-header" class="text-center mb-6 border-b-2 border-indigo-900 pb-4">
+                                    <h1 class="text-2xl font-black uppercase tracking-tighter text-indigo-900">Expense Report</h1>
+                                    <p id="er-biz-name" class="text-sm font-black uppercase mt-1">---</p>
+                                    <p id="er-date-range" class="text-[10px] font-bold text-slate-500 uppercase mt-1 tracking-widest">---</p>
+                                    <p id="er-gen-date" class="text-[8px] font-black text-slate-400 uppercase mt-2 opacity-50 tracking-widest">Report Date: <span id="er-gen-date-val">---</span></p>
+                                </div>
+                                <table class="w-full text-left text-xs font-bold min-w-[500px]">
+                                    <thead class="text-[10px] font-black uppercase text-slate-400 bg-slate-50 border-b">
+                                        <tr><th>S/N</th><th class="py-4 px-4">Date</th><th>Time</th><th>Description</th><th>Person</th><th class="text-right">Amount</th><th class="text-center no-print">Action</th></tr>
+                                    </thead>
+                                    <tbody id="expense-list-body" class="divide-y"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Close of Day Selection -->
+            <div id="tab-close-day" class="hidden space-y-8 animate-in fade-in duration-500">
+                <div class="max-w-xl mx-auto bg-white p-8 rounded-[3rem] border shadow-sm space-y-6">
+                    <div class="text-center"><h2 class="text-xl font-black text-indigo-900 uppercase tracking-tight">Close of Day Report</h2><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Select date range for business analysis</p></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label class="text-[10px] font-black uppercase text-slate-400 block mb-1 ml-1">Start Date</label><input type="date" id="cds-range-from" class="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"></div>
+                        <div><label class="text-[10px] font-black uppercase text-slate-400 block mb-1 ml-1">End Date</label><input type="date" id="cds-range-to" class="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"></div>
+                    </div>
+                    <button onclick="generateCDReport()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] shadow-xl hover:bg-indigo-700 transition-all transform hover:-translate-y-0.5">Generate Business Dashboard</button>
+                </div>
+            </div>
+
+            <!-- Tab Customers -->
+            <div id="tab-customers" class="hidden space-y-6">
+                <div class="bg-white p-6 rounded-[2.5rem] border shadow-sm">
+                    <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                        <h2 class="text-lg font-black uppercase text-indigo-900">Customer Database</h2>
+                        <div class="flex flex-wrap gap-2 no-print">
+                            <div class="relative min-w-[200px]"><input type="text" id="customer-db-search" oninput="renderCustomerDB()" placeholder="Search Customers..." class="w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-[10px] font-bold outline-none"></div>
+                            <button onclick="window.downloadPNG('customers-table-wrapper', 'Customer_Database')" class="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-wider hover:bg-indigo-100 transition-colors" title="Download PNG"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg> PNG</button>
+                            <button onclick="window.downloadPDF('customers-table-wrapper', 'Customer_Database')" class="bg-rose-50 text-rose-600 p-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-wider hover:bg-rose-100 transition-colors" title="Download PDF"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg> PDF</button>
+                            <button onclick="window.print()" class="bg-slate-50 text-slate-900 p-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-wider hover:bg-slate-100 transition-colors" title="Print Database"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg> Print</button>
+                            <button onclick="exportCustomerCSV()" class="bg-emerald-50 text-emerald-600 p-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-wider hover:bg-emerald-100 transition-colors" title="Export CSV"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /></svg> CSV</button>
+                            <button onclick="window.shareOnPhone('customers-table-wrapper', 'Customer_Database')" class="bg-sky-50 text-sky-600 p-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-wider hover:bg-sky-100 transition-colors" title="Share Mobile"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/></svg> SHARE</button>
+                        </div>
+                    </div>
+                    <div class="table-wrapper no-scrollbar" id="customers-table-wrapper">
+                        <div id="customer-export-header" class="text-center mb-6 border-b-2 border-indigo-900 pb-4">
+                            <h1 class="text-2xl font-black uppercase tracking-tighter text-indigo-900">Customer Database Registry</h1>
+                            <p id="cust-er-biz-name" class="text-sm font-black uppercase mt-1">---</p>
+                            <p class="text-[8px] font-black text-slate-400 uppercase mt-2 opacity-50 tracking-widest">Report Date: <span id="cust-er-gen-date-val">---</span></p>
+                        </div>
+                        <table class="w-full text-left text-xs font-bold min-w-[800px]">
+                            <thead class="bg-slate-50 border-b">
+                                <tr class="text-[10px] font-black uppercase text-slate-400">
+                                    <th class="py-4 px-4">Customer Name</th><th>Phone</th><th>Address</th><th class="text-right">Total Amount Spent So Far</th><th class="no-print text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customer-db-body" class="divide-y"></tbody>
+                        </table>
+                    </div>
+                    <div class="scroll-ctrl no-print">
+                        <button onclick="scrollActiveTable(-1)" class="scroll-btn" title="Scroll Left"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"/></svg></button>
+                        <button onclick="scrollActiveTable(1)" class="scroll-btn" title="Scroll Right"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"/></svg></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Debt & Credits -->
+            <div id="tab-credits" class="hidden space-y-8">
+                <div class="bg-white p-6 rounded-3xl border border-slate-100 flex flex-col md:flex-row items-center justify-between no-print mb-6 gap-4">
+                    <div class="flex flex-col gap-2">
+                        <h2 class="text-lg font-black uppercase text-indigo-900 leading-tight">Debts & Credits Management</h2>
+                        <div class="flex gap-2">
+                            <button id="filter-credits-all" onclick="setCreditsFilter('ALL')" class="bg-indigo-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all">All</button>
+                            <button id="filter-credits-debtors" onclick="setCreditsFilter('DEBTORS')" class="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all">Debtors</button>
+                            <button id="filter-credits-creditors" onclick="setCreditsFilter('CREDITORS')" class="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all">Creditors</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <div class="relative min-w-[200px]"><input type="text" id="credits-search" oninput="renderCredits()" placeholder="Search Records..." class="w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-[10px] font-bold outline-none"></div>
+                        <button onclick="window.downloadPNG('debt-table-wrapper', 'Debts_And_Credits')" class="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 transition-colors" title="Download PNG"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></button>
+                        <button onclick="window.downloadPDF('debt-table-wrapper', 'Debts_And_Credits')" class="bg-rose-600 text-white p-2.5 rounded-xl hover:bg-rose-700 transition-colors" title="Download PDF"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg></button>
+                        <button onclick="window.print()" class="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-slate-950 transition-colors" title="Print Report"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg></button>
+                        <button onclick="exportCreditsCSV()" class="bg-emerald-600 text-white p-2.5 rounded-xl hover:bg-emerald-700 transition-colors" title="Export CSV"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg></button>
+                        <button onclick="window.shareOnPhone('debt-table-wrapper', 'Debts_And_Credits')" class="bg-sky-600 text-white p-2.5 rounded-xl hover:bg-sky-700 transition-colors" title="Share Mobile"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg></button>
+                    </div>
+                </div>
+                <div class="table-wrapper no-scrollbar shadow-sm border border-slate-100 rounded-[2rem]" id="debt-table-wrapper">
+                    <table class="excel-table min-w-[1200px]" id="debt-management-table">
+                        <thead>
+                            <tr><th>Customer Name</th><th>Receipt #</th><th class="text-right">Total Purchase</th><th class="text-right text-emerald-600">Amount Paid</th><th class="text-right text-rose-600">Outstanding Balance</th><th class="text-right text-indigo-700">Credit Balance</th><th class="text-center">Last Activity</th><th class="no-print">Manage</th></tr>
+                        </thead>
+                        <tbody id="credits-records-body" class="text-[12px] font-bold"></tbody>
+                    </table>
+                </div>
+                <div class="scroll-ctrl no-print">
+                    <button onclick="scrollActiveTable(-1)" class="scroll-btn" title="Scroll Left"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"/></svg></button>
+                    <button onclick="scrollActiveTable(1)" class="scroll-btn" title="Scroll Right"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"/></svg></button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <footer class="no-print bg-white border-t border-slate-200 py-8 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-1">SwiftBill by Prudenz – Version 1.0 – Smart Tools for Smart Businesses</p>
+            <p class="text-[7px] font-bold text-slate-400 mb-2 leading-relaxed px-12 uppercase">Licensed for authorized users only. Unauthorized copying, sharing, redistribution, or resale of this application or its access link without permission may result in access termination and legal action.</p>
+            <p class="text-[9px] font-bold text-slate-400">Powered by Prudenz Archibong | archibongprudenz@gmail.com</p>
+        </div>
+    </footer>
+
+    <div id="reprint-invisible-zone" class="fixed -top-[8000px] -left-[8000px] w-[500px] bg-white"></div>
+
+    <script>
+        const DB_KEY = 'swiftbill_v16.2';
+        const EXPENSE_DB_KEY = 'swiftbill_expenses_v1.0';
+        const BRANDING_KEY = 'swiftbill_branding_v1.0';
+        const FOOTER_STATE_KEY = 'swiftbill_footer_v1.0';
+        const CURRENCY_DB_KEY = 'swiftbill_currencies_v1.0';
+        const SELECTED_CURR_KEY = 'swiftbill_selected_curr_v1.0';
+       
+        let salesHistory = JSON.parse(localStorage.getItem(DB_KEY)) || [];
+        let expenseHistory = JSON.parse(localStorage.getItem(EXPENSE_DB_KEY)) || [];
+        let branding = JSON.parse(localStorage.getItem(BRANDING_KEY)) || { logo: null, sig: null };
+        let businessFooterNote = localStorage.getItem(FOOTER_STATE_KEY) || "Thank you for your patronage!";
+        let worldCurrencies = JSON.parse(localStorage.getItem(CURRENCY_DB_KEY)) || [
+            { code: 'NGN', symbol: '₦', name: 'Naira', fraction: 'Kobo' },
+            { code: 'USD', symbol: '$', name: 'Dollar', fraction: 'Cents' }
+        ];
+
+        let items = [];
+        let needsResetAfterSave = false;
+        let activeTab = 'generator';
+        let currentPayingReceiptID = null;
+        let creditsFilterType = 'ALL';
+        let currentRefRecord = null;
+        let pChart = null;
+        let perfChart = null;
+
+        function showToast(msg) {
+            const t = document.getElementById('notification-toast');
+            if (!t) return;
+            document.getElementById('toast-message').textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function safeSetValue(id, val) { const el = document.getElementById(id); if (el) el.value = val; }
+        function safeSetText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+
+        function formatCurrencyDisplay(val) {
+            const num = parseFloat(val);
+            if (isNaN(num)) return "0.00";
+            return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function amountToWords(amount, symbol) {
+            const cur = worldCurrencies.find(c => c.symbol === symbol) || worldCurrencies[0];
+            const integer = Math.floor(amount);
+            const decimal = Math.round((amount - integer) * 100);
+            let result = numberToWords(integer) + ' ' + cur.name;
+            if (decimal > 0) result += ' and ' + numberToWords(decimal) + ' ' + (cur.fraction || 'Units');
+            return result + ' Only';
+        }
+
+        function switchTab(tab) {
+            activeTab = tab;
+            ['generator', 'records', 'close-day', 'credits', 'customers', 'expenses'].forEach(t => {
+                const tabEl = document.getElementById(`tab-${t}`);
+                const navEl = document.getElementById(`nav-${t}`);
+                if (tabEl) tabEl.classList.add('hidden');
+                if (navEl) navEl.classList.remove('tab-active');
+            });
+            const activeTabEl = document.getElementById(`tab-${tab}`);
+            const activeNavEl = document.getElementById(`nav-${tab}`);
+            if (activeTabEl) activeTabEl.classList.remove('hidden');
+            if (activeNavEl) activeNavEl.classList.add('tab-active');
+            if (tab === 'records') renderHistory();
+            if (tab === 'credits') renderCredits();
+            if (tab === 'customers') renderCustomerDB();
+            if (tab === 'expenses') renderExpenses();
+        }
+
+        function toggleCloseDaySummary(show) { document.getElementById('close-day-summary-modal').classList.toggle('hidden', !show); }
+
+        function saveExpense() {
+            const date = document.getElementById('expense-date').value;
+            const desc = document.getElementById('expense-desc').value;
+            const person = document.getElementById('expense-person').value;
+            const amt = parseFloat(document.getElementById('expense-amount').value);
+            if (!date || !desc || !person || isNaN(amt)) return showToast("Enter all expense details");
+            const now = new Date();
+            const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            const entry = { id: Date.now(), date, time, desc, person, amount: amt };
+            expenseHistory.unshift(entry);
+            localStorage.setItem(EXPENSE_DB_KEY, JSON.stringify(expenseHistory));
+            document.getElementById('expense-desc').value = '';
+            document.getElementById('expense-person').value = '';
+            document.getElementById('expense-amount').value = '';
+            showToast("Expense Recorded");
+            renderExpenses();
+        }
+
+        function renderExpenses() {
+            const rangeFrom = document.getElementById('expense-range-from').value;
+            const rangeTo = document.getElementById('expense-range-to').value;
+            const body = document.getElementById('expense-list-body');
+            if (!body) return;
+            body.innerHTML = '';
+            let filtered = expenseHistory;
+            if (rangeFrom && rangeTo) { filtered = expenseHistory.filter(e => e.date >= rangeFrom && e.date <= rangeTo); }
+            let total = 0;
+            const currCode = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN';
+            const curr = worldCurrencies.find(c => c.code === currCode) || worldCurrencies[0];
+            filtered.forEach((e, idx) => {
+                total += e.amount;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="text-center opacity-40">${idx + 1}</td><td class="py-4 px-4 uppercase font-black">${new Date(e.date).toLocaleDateString('en-GB')}</td><td class="uppercase">${e.time || '---'}</td><td class="uppercase font-bold">${e.desc}</td><td class="uppercase font-medium text-indigo-600">${e.person || '---'}</td><td class="text-right font-black text-rose-500">${curr.symbol}${formatCurrencyDisplay(e.amount)}</td><td class="text-center no-print"><button onclick="deleteExpense(${e.id})" class="bg-rose-50 text-rose-600 px-3 py-1 rounded-lg text-[10px] font-black">DELETE</button></td>`;
+                body.appendChild(tr);
+            });
+            const disp = document.getElementById('total-expense-period-display');
+            if (disp) disp.textContent = `${curr.symbol}${formatCurrencyDisplay(total)}`;
+            safeSetText('er-biz-name', (document.getElementById('company-name').value || "SwiftBill Business").toUpperCase());
+            safeSetText('er-date-range', (rangeFrom && rangeTo) ? `Period: ${new Date(rangeFrom).toLocaleDateString('en-GB')} to ${new Date(rangeTo).toLocaleDateString('en-GB')}` : "Full History Ledger");
+            safeSetText('er-gen-date-val', new Date().toLocaleString('en-GB'));
+        }
+
+        function deleteExpense(id) {
+            if (!confirm("Remove this record?")) return;
+            expenseHistory = expenseHistory.filter(e => e.id !== id);
+            localStorage.setItem(EXPENSE_DB_KEY, JSON.stringify(expenseHistory));
+            renderExpenses();
+        }
+
+        function openCloseOfDaySummary(fromOverride, toOverride) {
+            const from = fromOverride || document.getElementById('expense-range-from').value;
+            const to = toOverride || document.getElementById('expense-range-to').value;
+            if (!from || !to) return showToast("Select date range first");
+            const rangeSales = salesHistory.filter(s => { const d = s.ts.split('T')[0]; return d >= from && d <= to; });
+            const rangeExpenses = expenseHistory.filter(e => e.date >= from && e.date <= to);
+            const totalSales = rangeSales.reduce((acc, curr) => acc + (curr.total || 0), 0);
+            const txnCount = rangeSales.length;
+            const totalVAT = rangeSales.reduce((acc, curr) => acc + (curr.vat || 0), 0);
+            const totalDiscount = rangeSales.reduce((acc, curr) => acc + (curr.discount || 0), 0);
+            const totalCash = rangeSales.reduce((acc, curr) => acc + (curr.paid?.cash || 0), 0);
+            const totalPOS = rangeSales.reduce((acc, curr) => acc + (curr.paid?.pos || 0), 0);
+            const totalBank = rangeSales.reduce((acc, curr) => acc + (curr.paid?.bank || 0), 0);
+            const totalOutstanding = rangeSales.reduce((acc, curr) => acc + (curr.balance > 0 ? curr.balance : 0), 0);
+            const totalCredit = rangeSales.reduce((acc, curr) => acc + (curr.balance < 0 ? Math.abs(curr.balance) : 0), 0);
+            const totalExp = rangeExpenses.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+            const net = totalSales - totalExp;
+            const saleValues = rangeSales.map(s => s.total);
+            const highSale = saleValues.length ? Math.max(...saleValues) : 0;
+            const avgVal = txnCount > 0 ? totalSales / txnCount : 0;
+            const itemFreq = {};
+            rangeSales.forEach(s => { s.items.forEach(it => { itemFreq[it.desc] = (itemFreq[it.desc] || 0) + (parseFloat(it.qty) || 0); }); });
+            let mostSold = "---"; let maxQty = 0;
+            for (const [name, qty] of Object.entries(itemFreq)) { if (qty > maxQty) { mostSold = name; maxQty = qty; } }
+            const currCode = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN';
+            const curr = worldCurrencies.find(c => c.code === currCode) || worldCurrencies[0];
+            safeSetText('cds-comp-name', (document.getElementById('company-name').value || "SwiftBill Business").toUpperCase());
+            safeSetText('cds-date', `${new Date(from).toLocaleDateString('en-GB')} TO ${new Date(to).toLocaleDateString('en-GB')}`);
+            safeSetText('cds-total-sales', `${curr.symbol}${formatCurrencyDisplay(totalSales)}`);
+            safeSetText('cds-txn-count', txnCount);
+            safeSetText('cds-total-vat', `${curr.symbol}${formatCurrencyDisplay(totalVAT)}`);
+            safeSetText('cds-total-discount', `${curr.symbol}${formatCurrencyDisplay(totalDiscount)}`);
+            safeSetText('cds-avg-val', `${curr.symbol}${formatCurrencyDisplay(avgVal)}`);
+            safeSetText('cds-high-sale', `${curr.symbol}${formatCurrencyDisplay(highSale)}`);
+            safeSetText('cds-most-sold', mostSold.toUpperCase());
+            safeSetText('cds-cash-received', `${curr.symbol}${formatCurrencyDisplay(totalCash)}`);
+            safeSetText('cds-pos-received', `${curr.symbol}${formatCurrencyDisplay(totalPOS)}`);
+            safeSetText('cds-bank-received', `${curr.symbol}${formatCurrencyDisplay(totalBank)}`);
+            safeSetText('cds-total-outstanding', `${curr.symbol}${formatCurrencyDisplay(totalOutstanding)}`);
+            safeSetText('cds-total-credit', `${curr.symbol}${formatCurrencyDisplay(totalCredit)}`);
+            const expenseDisplays = document.querySelectorAll('#cds-total-expenses');
+            expenseDisplays.forEach(el => el.textContent = `${curr.symbol}${formatCurrencyDisplay(totalExp)}`);
+            const formulaText = `₦${formatCurrencyDisplay(totalSales)} Sales – ₦${formatCurrencyDisplay(totalExp)} Expenses = ${net >= 0 ? 'PROFIT' : 'LOSS'}`;
+            safeSetText('cds-calc-formula', formulaText);
+            const netDisplay = document.getElementById('cds-net-result');
+            const statusText = document.getElementById('cds-status-text');
+            const statusPill = document.getElementById('cds-status-pill');
+            if (netDisplay) { netDisplay.textContent = `${curr.symbol}${formatCurrencyDisplay(Math.abs(net))}`; netDisplay.style.color = net >= 0 ? "#047857" : "#be123c"; }
+            if (statusText) statusText.textContent = net >= 0 ? "PROFIT" : "LOSS";
+            if (statusPill) { statusPill.className = `px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest ${net >= 0 ? 'bg-emerald-600' : 'bg-rose-600'} text-white shadow-lg`; }
+            setTimeout(() => {
+                try {
+                    const pCtx = document.getElementById('paymentChart').getContext('2d'); if (pChart) pChart.destroy();
+                    pChart = new Chart(pCtx, { type: 'doughnut', data: { labels: ['Cash', 'POS', 'Bank'], datasets: [{ data: [totalCash, totalPOS, totalBank], backgroundColor: ['#10b981', '#0ea5e9', '#8b5cf6'], borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 9, weight: 'bold' }, usePointStyle: true } } } } });
+                    const perfCtx = document.getElementById('performanceChart').getContext('2d'); if (perfChart) perfChart.destroy();
+                    perfChart = new Chart(perfCtx, { type: 'bar', data: { labels: ['Sales', 'Expenses'], datasets: [{ data: [totalSales, totalExp], backgroundColor: ['#4f46e5', '#f43f5e'], borderRadius: 10 }] }, options: { scales: { y: { display: false }, x: { grid: { display: false } } }, plugins: { legend: { display: false } } } });
+                } catch (e) { console.error("Chart load failed", e); }
+            }, 200);
+            toggleCloseDaySummary(true);
+        }
+
+        function generateCDReport() {
+            const from = document.getElementById('cds-range-from').value;
+            const to = document.getElementById('cds-range-to').value;
+            if (!from || !to) return showToast("Select date range first");
+            openCloseOfDaySummary(from, to);
+        }
+
+        function toggleCurrencyModal(show) { const modal = document.getElementById('currency-modal'); if (modal) modal.classList.toggle('hidden', !show); }
+       
+        function populateCurrencySelect() {
+            const s = document.getElementById('currency-select'); if(!s) return;
+            const saved = localStorage.getItem(SELECTED_CURR_KEY);
+            s.innerHTML = '';
+            worldCurrencies.forEach(c => {
+                const o = document.createElement('option'); o.value = c.code; o.textContent = `${c.name} (${c.symbol})`;
+                if (c.code === saved) o.selected = true;
+                s.appendChild(o);
+            });
+        }
+       
+        function handleCurrencyChange() {
+            localStorage.setItem(SELECTED_CURR_KEY, document.getElementById('currency-select').value);
+            renderItemRows(); updatePreview(); renderHistory(); renderExpenses(); renderCredits(); renderCustomerDB();
+        }
+       
+        function addNewCurrency() {
+            const name = document.getElementById('new-curr-name').value.trim();
+            const code = document.getElementById('new-curr-code').value.trim().toUpperCase();
+            const symbol = document.getElementById('new-curr-symbol').value.trim();
+            const fraction = document.getElementById('new-curr-fraction').value.trim() || 'Units';
+            if (!name || !code || !symbol) return showToast("Required details missing");
+            const existing = worldCurrencies.find(c => c.code === code);
+            if (!existing) { worldCurrencies.push({ code, symbol, name, fraction }); localStorage.setItem(CURRENCY_DB_KEY, JSON.stringify(worldCurrencies)); }
+            populateCurrencySelect(); localStorage.setItem(SELECTED_CURR_KEY, code); document.getElementById('currency-select').value = code; handleCurrencyChange();
+            toggleCurrencyModal(false); showToast(`Currency ${code} Applied`);
+        }
+
+        function togglePaymentModal(show) {
+            const modal = document.getElementById('payment-modal');
+            modal.classList.toggle('hidden', !show);
+            if (show) {
+                // Focus the amount input automatically when popup opens
+                setTimeout(() => document.getElementById('pay-amount')?.focus(), 200);
+            }
+        }
+       
+        // Repaired: Enhanced Popup fields for PAY button
+        function openPaymentModal(receiptID) {
+            const record = salesHistory.find(r => r.id === receiptID);
+            if (!record || (Math.abs(record.balance) < 0.005)) return showToast("Record has no outstanding debt or credit.");
+            currentPayingReceiptID = receiptID;
+            const currCode = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN';
+            const curr = worldCurrencies.find(c => c.code === currCode) || worldCurrencies[0];
+            const isCredit = record.balance < -0.005;
+           
+            // Populate fields
+            safeSetText('pay-receipt-id', currentPayingReceiptID);
+            safeSetText('pay-client-name', record.client.toUpperCase());
+            safeSetText('pay-total-purchase', `${curr.symbol}${formatCurrencyDisplay(record.total)}`);
+            safeSetText('pay-amount-paid-sum', `${curr.symbol}${formatCurrencyDisplay(record.paid.total)}`);
+           
+            safeSetText('pay-balance-label', isCredit ? "Available Credit Balance" : "Outstanding Balance");
+            safeSetText('pay-total-owed', `${curr.symbol}${formatCurrencyDisplay(Math.abs(record.balance))}`);
+            document.getElementById('pay-total-owed').className = isCredit ? "text-2xl font-black text-emerald-600" : "text-2xl font-black text-rose-600";
+           
+            safeSetValue('pay-amount', '');
+            togglePaymentModal(true);
+        }
+
+        function confirmDebtPayment() {
+            const amountInput = document.getElementById('pay-amount').value;
+            const amount = parseFloat(amountInput);
+            const method = document.getElementById('pay-method').value;
+            if (isNaN(amount) || amount <= 0) return showToast("Enter valid amount");
+           
+            const record = salesHistory.find(r => r.id === currentPayingReceiptID);
+            if (record) {
+                if (record.balance < -0.005) {
+                    record.balance += amount;
+                    if (record.balance > 0.005) record.balance = 0;
+                } else {
+                    record.balance -= amount;
+                }
+                record.paid.total += amount;
+                if (method === 'CASH') record.paid.cash += amount;
+                else if (method === 'POS') record.paid.pos += amount;
+                else if (method === 'BANK') record.paid.bank += amount;
+               
+                if (!record.paymentLog) record.paymentLog = [];
+                record.paymentLog.push({ ts: new Date().toISOString(), amount: amount, method: "ADJUSTMENT: " + method });
+                record.status = Math.abs(record.balance) <= 0.005 ? 'FULL PAYMENT' : 'PART PAYMENT';
+            }
+           
+            localStorage.setItem(DB_KEY, JSON.stringify(salesHistory));
+            togglePaymentModal(false);
+            showToast("Record & All Linked Accounts Updated");
+           
+            // Refresh all tabs to reflect payment
+            renderCredits();
+            renderHistory();
+            renderCustomerDB();
+        }
+
+        function handleReceiptRefInput() {
+            const refID = document.getElementById('ref-receipt-id').value.trim();
+            const creditContainer = document.getElementById('credit-toggle-container');
+            if (!refID) { currentRefRecord = null; creditContainer.classList.add('hidden'); updatePreview(); return; }
+            const record = salesHistory.find(r => r.id === refID);
+            if (record) {
+                currentRefRecord = record;
+                document.getElementById('cust-name').value = record.client;
+                document.getElementById('cust-phone').value = record.clientPhone || '';
+                document.getElementById('cust-address').value = record.clientAddress || '';
+                if (record.balance < -0.005) { creditContainer.classList.remove('hidden'); } else { creditContainer.classList.add('hidden'); }
+                showToast("Reference Found: " + record.client);
+                updatePreview();
+            } else {
+                currentRefRecord = null;
+                creditContainer.classList.add('hidden');
+                updateReceiptID();
+            }
+        }
+
+        function setCreditsFilter(type) {
+            creditsFilterType = type;
+            ['all', 'debtors', 'creditors'].forEach(id => {
+                const el = document.getElementById(`filter-credits-${id}`);
+                if (el) el.className = (id.toUpperCase() === type) ? "bg-indigo-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all shadow-md" : "bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all";
+            });
+            renderCredits();
+        }
+
+        function renderCredits() {
+            const body = document.getElementById('credits-records-body');
+            const searchQ = document.getElementById('credits-search')?.value.toLowerCase() || '';
+            if(!body) return; body.innerHTML = '';
+            let list = salesHistory.filter(r => {
+                const matchesSearch = !searchQ || [r.client, r.id].some(s => s.toLowerCase().includes(searchQ));
+                if (!matchesSearch) return false;
+                const hasDebt = r.balance > 0.005; const hasCredit = r.balance < -0.005;
+                if (creditsFilterType === 'DEBTORS') return hasDebt;
+                if (creditsFilterType === 'CREDITORS') return hasCredit;
+                return hasDebt || hasCredit;
+            });
+            const currCode = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN';
+            const curr = worldCurrencies.find(c => c.code === currCode) || worldCurrencies[0];
+            list.forEach(d => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="uppercase font-black py-4">${d.client}</td><td class="text-indigo-600 font-bold">${d.id}</td><td class="text-right">${curr.symbol}${formatCurrencyDisplay(d.total)}</td><td class="text-right text-emerald-600">${curr.symbol}${formatCurrencyDisplay(d.paid.total)}</td><td class="text-right text-rose-600">${d.balance > 0.005 ? curr.symbol + formatCurrencyDisplay(d.balance) : '—'}</td><td class="text-right text-indigo-700">${d.balance < -0.005 ? curr.symbol + formatCurrencyDisplay(Math.abs(d.balance)) : '—'}</td><td class="text-center">${new Date(d.ts).toLocaleDateString('en-GB')}</td><td class="no-print"><div class="flex gap-2 justify-center"><button onclick="openPaymentModal('${d.id}')" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase">PAY</button><button onclick="openStatementModal('${d.client.replace(/'/g, "\\'")}')" class="bg-indigo-950 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase">Statement</button></div></td>`;
+                body.appendChild(tr);
+            });
+        }
+
+        function handleBrandingUpload(type, input) {
+            const file = input.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => { branding[type] = e.target.result; localStorage.setItem(BRANDING_KEY, JSON.stringify(branding)); updatePreview(); showToast(`${type.toUpperCase()} Updated`); updateBrandingUI(); };
+            reader.readAsDataURL(file);
+        }
+
+        function handleCustomerInput() {
+            const nameInput = document.getElementById('cust-name').value;
+            const grouped = getGroupedCustomers();
+            if (grouped[nameInput.toUpperCase()]) { const c = grouped[nameInput.toUpperCase()]; document.getElementById('cust-phone').value = c.phone || ''; document.getElementById('cust-address').value = c.address || ''; }
+            updatePreview();
+        }
+
+        function getGroupedCustomers() {
+            const map = {};
+            salesHistory.forEach(r => { const key = r.client.toUpperCase(); if (!map[key]) map[key] = { name: r.client, phone: r.clientPhone, address: r.clientAddress, spent: 0 }; map[key].spent += r.total; });
+            return map;
+        }
+
+        function updateCustomerSuggestions() { const list = document.getElementById('customer-suggestions'); if (!list) return; const grouped = getGroupedCustomers(); list.innerHTML = Object.keys(grouped).map(n => `<option value="${n}">`).join(''); }
+
+        function addItemRow() { const id = Date.now(); items.push({ id, desc: '', qty: '', price: '' }); renderItemRows(); }
+
+        function renderItemRows() {
+            const container = document.getElementById('items-container'); if (!container) return;
+            const code = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN';
+            const curr = worldCurrencies.find(c => c.code === code) || worldCurrencies[0];
+            container.innerHTML = items.map(i => {
+                const rowTotal = (parseFloat(i.price) || 0) * (parseFloat(i.qty) || 0);
+                return `<div class="grid grid-cols-12 gap-2 bg-white border border-slate-100 p-2 rounded-xl items-center"><input type="text" placeholder="Item" value="${i.desc}" oninput="updateItem(${i.id}, 'desc', this.value)" class="col-span-5 bg-slate-50 border p-2 rounded text-xs font-bold outline-none"><input type="number" placeholder="0.00" value="${i.price}" oninput="updateItem(${i.id}, 'price', this.value)" class="col-span-2 bg-slate-50 border p-2 rounded text-xs text-center font-bold outline-none"><input type="number" placeholder="0" value="${i.qty}" oninput="updateItem(${i.id}, 'qty', this.value)" class="col-span-2 bg-slate-50 border p-2 rounded text-xs text-center font-bold outline-none"><div id="row-total-${i.id}" class="col-span-2 text-[10px] font-black text-indigo-600 text-right pr-2">${curr.symbol}${formatCurrencyDisplay(rowTotal)}</div><button onclick="removeItem(${i.id})" class="col-span-1 text-rose-500 font-bold hover:bg-rose-50 rounded">×</button></div>`;
+            }).join('');
+            updatePreview();
+        }
+
+        function updateItem(id, field, val) {
+            const i = items.find(x => x.id === id);
+            if (i) {
+                i[field] = val; const rowTotal = (parseFloat(i.price) || 0) * (parseFloat(i.qty) || 0); const rowTotalEl = document.getElementById(`row-total-${id}`);
+                if (rowTotalEl) { const code = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN'; const curr = worldCurrencies.find(c => c.code === code) || worldCurrencies[0]; rowTotalEl.textContent = curr.symbol + formatCurrencyDisplay(rowTotal); }
+                updatePreview();
+            }
+        }
+
+        function removeItem(id) { items = items.filter(x => x.id !== id); if (!items.length) addItemRow(); renderItemRows(); }
+
+        function calculateTotals() {
+            const sub = items.reduce((a, b) => a + (parseFloat(b.price) || 0) * (parseFloat(b.qty) || 0), 0);
+            const discVal = parseFloat(document.getElementById('discount-value').value) || 0;
+            const vatPct = parseFloat(document.getElementById('vat-percent').value) || 0;
+            const totalAfterDisc = Math.max(0, sub - discVal);
+            const vatVal = totalAfterDisc * (vatPct / 100);
+            let total = totalAfterDisc + vatVal;
+            let refDebtAdded = 0;
+            let refCreditApplied = 0;
+            if (currentRefRecord) {
+                if (currentRefRecord.balance > 0.005) { refDebtAdded = currentRefRecord.balance; total += refDebtAdded; }
+                else if (currentRefRecord.balance < -0.005) {
+                    const applyChecked = document.getElementById('use-available-credit')?.checked;
+                    if (applyChecked) { refCreditApplied = Math.abs(currentRefRecord.balance); total -= refCreditApplied; }
+                }
+            }
+            const paid = (parseFloat(document.getElementById('paid-cash').value) || 0) + (parseFloat(document.getElementById('paid-pos').value) || 0) + (parseFloat(document.getElementById('paid-bank').value) || 0);
+            return { sub, discVal, vatVal, total, paid, bal: total - paid, refDebtAdded, refCreditApplied };
+        }
+
+        function calculateDiscountFromPercent() { const pct = parseFloat(document.getElementById('discount-percent').value) || 0; const sub = items.reduce((a,b)=>a+(parseFloat(b.qty)*parseFloat(b.price)||0), 0); document.getElementById('discount-value').value = (sub * (pct / 100)).toFixed(2); updatePreview(); }
+        function calculatePercentFromValue() { const val = parseFloat(document.getElementById('discount-value').value) || 0; const sub = items.reduce((a,b)=>a+(parseFloat(b.qty)*parseFloat(b.price)||0), 0); if (sub > 0) document.getElementById('discount-percent').value = ((val / sub) * 100).toFixed(1); updatePreview(); }
+
+        function togglePaymentMode() {
+            const mode = document.getElementById('payment-status-select').value;
+            const container = document.getElementById('payment-inputs-container');
+            if (mode === 'NONE') {
+                container.classList.add('opacity-40', 'pointer-events-none');
+                document.getElementById('paid-cash').value = '0';
+                document.getElementById('paid-pos').value = '0';
+                document.getElementById('paid-bank').value = '0';
+            } else {
+                container.classList.remove('opacity-40', 'pointer-events-none');
+            }
+            updatePreview();
+        }
+
+        // Receipt Number Format Patch: SB.[CompanyName].0001
+        function updateReceiptID() {
+            const compRaw = document.getElementById('company-name').value || "SwiftBill";
+            const comp = compRaw.replace(/\s+/g, ''); // Strip spaces
+            const prefix = `SB.${comp}.`;
+           
+            const relevant = salesHistory.filter(s => s.id.startsWith(prefix));
+            let nextNum = 1;
+            if (relevant.length > 0) {
+                const nums = relevant.map(s => {
+                    const parts = s.id.split('.');
+                    return parseInt(parts[parts.length - 1]);
+                }).filter(n => !isNaN(n));
+                if (nums.length > 0) nextNum = Math.max(...nums) + 1;
+            }
+            const newID = prefix + nextNum.toString().padStart(4, '0');
+            document.getElementById('receipt-id').textContent = newID;
+        }
+
+        function handlePaymentInputChange() {
+            const { total, paid } = calculateTotals();
+            const statusSelect = document.getElementById('payment-status-select');
+           
+            if (paid >= total && total > 0) {
+                statusSelect.value = 'FULL';
+            } else if (paid > 0 && paid < total) {
+                statusSelect.value = 'PART';
+            } else if (paid <= 0) {
+                statusSelect.value = 'NONE';
+            }
+           
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const { sub, discVal, vatVal, total, paid, bal, refDebtAdded, refCreditApplied } = calculateTotals();
+            const pCash = parseFloat(document.getElementById('paid-cash').value) || 0;
+            const pPos = parseFloat(document.getElementById('paid-pos').value) || 0;
+            const pBank = parseFloat(document.getElementById('paid-bank').value) || 0;
+            const code = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN';
+            const curr = worldCurrencies.find(c => c.code === code) || worldCurrencies[0];
+           
+            document.getElementById('prev-company-name-display').textContent = document.getElementById('company-name').value || 'YOUR BUSINESS NAME';
+            document.getElementById('prev-company-address-display').textContent = document.getElementById('company-address').value || 'ADDRESS LINE';
+            document.getElementById('prev-company-phone-display').textContent = document.getElementById('company-phone').value || 'PHONE NUMBER';
+           
+            const staffName = document.getElementById('staff-name').value || 'ADMIN STAFF';
+            safeSetText('prev-served-by-name', staffName.toUpperCase());
+           
+            if (branding.logo) { document.getElementById('prev-logo-container').classList.remove('hidden'); document.getElementById('prev-logo-img').src = branding.logo; } else document.getElementById('prev-logo-container').classList.add('hidden');
+            if (branding.sig) { document.getElementById('prev-sig-container').classList.remove('hidden'); document.getElementById('prev-sig-img').src = branding.sig; } else document.getElementById('prev-sig-container').classList.add('hidden');
+
+            document.getElementById('prev-cust-name').textContent = (document.getElementById('cust-name').value || '---').toUpperCase();
+            document.getElementById('prev-cust-phone').textContent = document.getElementById('cust-phone').value || '---';
+            document.getElementById('prev-cust-address').textContent = document.getElementById('cust-address').value || '---';
+           
+            const now = new Date();
+            document.getElementById('prev-date').textContent = now.toLocaleDateString('en-GB');
+            document.getElementById('prev-time').textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+            const list = document.getElementById('prev-items-list');
+            if (list) { list.innerHTML = items.map(i => `<div class="grid grid-cols-12 py-2 text-[8px] font-bold border-b"><div class="col-span-6 truncate uppercase">${i.desc || 'Item'}</div><div class="col-span-2 text-center">${i.qty || ''}</div><div class="col-span-4 text-right">${curr.symbol}${formatCurrencyDisplay((parseFloat(i.qty)||0) * (parseFloat(i.price)||0))}</div></div>`).join(''); }
+
+            safeSetText('prev-subtotal', curr.symbol + formatCurrencyDisplay(sub));
+            safeSetText('prev-discount', '-' + curr.symbol + formatCurrencyDisplay(discVal));
+            safeSetText('prev-vat', '+' + curr.symbol + formatCurrencyDisplay(vatVal));
+            safeSetText('prev-total', curr.symbol + formatCurrencyDisplay(total));
+            safeSetText('prev-paid-val', curr.symbol + formatCurrencyDisplay(paid));
+           
+            // Payment Breakdown Population
+            const cashRow = document.getElementById('prev-breakdown-cash-row');
+            const posRow = document.getElementById('prev-breakdown-pos-row');
+            const bankRow = document.getElementById('prev-breakdown-bank-row');
+           
+            if (paid > 0) {
+                safeSetText('prev-breakdown-cash-val', curr.symbol + formatCurrencyDisplay(pCash));
+                safeSetText('prev-breakdown-pos-val', curr.symbol + formatCurrencyDisplay(pPos));
+                safeSetText('prev-breakdown-bank-val', curr.symbol + formatCurrencyDisplay(pBank));
+                cashRow.classList.toggle('hidden', pCash <= 0);
+                posRow.classList.toggle('hidden', pPos <= 0);
+                bankRow.classList.toggle('hidden', pBank <= 0);
+            } else {
+                cashRow.classList.add('hidden'); posRow.classList.add('hidden'); bankRow.classList.add('hidden');
+            }
+           
+            const refDebtRow = document.getElementById('prev-ref-balance-row');
+            const refCreditRow = document.getElementById('prev-ref-credit-row');
+            const adjustmentRow = document.getElementById('prev-adjustment-row');
+
+            if (refDebtAdded > 0) {
+                safeSetText('prev-ref-balance-val', curr.symbol + formatCurrencyDisplay(refDebtAdded));
+                refDebtRow.classList.remove('hidden');
+                safeSetText('prev-adjustment-val', '+' + curr.symbol + formatCurrencyDisplay(refDebtAdded) + ' (Added)');
+                adjustmentRow.classList.remove('hidden');
+                refCreditRow.classList.add('hidden');
+            } else if (refCreditApplied > 0) {
+                safeSetText('prev-ref-credit-val', curr.symbol + formatCurrencyDisplay(refCreditApplied));
+                refCreditRow.classList.remove('hidden');
+                safeSetText('prev-adjustment-val', '-' + curr.symbol + formatCurrencyDisplay(refCreditApplied) + ' (Deducted)');
+                adjustmentRow.classList.remove('hidden');
+                refDebtRow.classList.add('hidden');
+            } else {
+                refDebtRow.classList.add('hidden');
+                refCreditRow.classList.add('hidden');
+                adjustmentRow.classList.add('hidden');
+            }
+           
+            const balRow = document.getElementById('prev-bal-row');
+            const creditRow = document.getElementById('prev-credit-row');
+            if (bal > 0.005) { safeSetText('prev-bal-val', curr.symbol + formatCurrencyDisplay(bal)); balRow.classList.remove('hidden'); creditRow.classList.add('hidden'); }
+            else if (bal < -0.005) { safeSetText('prev-credit-val', curr.symbol + formatCurrencyDisplay(Math.abs(bal))); creditRow.classList.remove('hidden'); balRow.classList.add('hidden'); }
+            else { balRow.classList.add('hidden'); creditRow.classList.add('hidden'); }
+           
+            const wordsBox = document.getElementById('prev-words-box');
+            if (total > 0 && wordsBox) { wordsBox.textContent = amountToWords(total, curr.symbol); wordsBox.classList.remove('hidden'); } else if (wordsBox) { wordsBox.classList.add('hidden'); }
+
+            const pill = document.getElementById('prev-payment-pill');
+            if (pill) {
+                if (bal > 0.005) { pill.textContent = 'PART PAYMENT'; pill.className = "text-[6px] font-black uppercase px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full border"; }
+                else if (bal < -0.005) { pill.textContent = 'OVERPAYMENT / CREDIT'; pill.className = "text-[6px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border"; }
+                else if (paid <= 0) { pill.textContent = 'NO PAYMENT'; pill.className = "text-[6px] font-black uppercase px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full border"; }
+                else { pill.textContent = 'PAID'; pill.className = "text-[6px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border"; }
+            }
+           
+            let methods = []; if (pCash > 0) methods.push("CASH"); if (pPos > 0) methods.push("POS"); if (pBank > 0) methods.push("BANK TRANSFER");
+            safeSetText('prev-payment-method', "METHOD: " + (methods.join(" / ") || "---"));
+            safeSetText('prev-business-footer-text', businessFooterNote.toUpperCase());
+            safeSetText('live-total-display', curr.symbol + formatCurrencyDisplay(total));
+            safeSetText('summary-total-payable', curr.symbol + formatCurrencyDisplay(total));
+            safeSetText('summary-amount-paying', curr.symbol + formatCurrencyDisplay(paid));
+            safeSetText('summary-balance-owed', curr.symbol + formatCurrencyDisplay(Math.max(0, bal)));
+        }
+
+        function openConfirmModal() {
+            try {
+                updatePreview(); const modal = document.getElementById('confirm-modal'); const content = document.getElementById('modal-content'); const receiptPaperEl = document.getElementById('receipt-paper'); if (!receiptPaperEl) return showToast("Receipt content missing");
+                const receipt = receiptPaperEl.cloneNode(true); receipt.id = "modal-receipt-capture"; receipt.classList.remove('receipt-shadow'); receipt.style.border = '1px solid #e2e8f0'; receipt.style.margin = '0 auto';
+                content.innerHTML = ''; content.appendChild(receipt);
+                modal.classList.remove('hidden'); document.getElementById('modal-confirm-btn').classList.remove('hidden'); document.getElementById('post-confirm-actions').classList.remove('hidden');
+            } catch (e) { console.error("Failed to open confirmation modal", e); showToast("System Error: Preview failure"); }
+        }
+
+        function handleConfirmSaveActual() {
+            const { total, paid, bal, discVal, vatVal, refDebtAdded, refCreditApplied } = calculateTotals();
+            const currCode = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN';
+            const curr = worldCurrencies.find(c => c.code === currCode) || worldCurrencies[0];
+            const pCash = parseFloat(document.getElementById('paid-cash').value) || 0;
+            const pPos = parseFloat(document.getElementById('paid-pos').value) || 0;
+            const pBank = parseFloat(document.getElementById('paid-bank').value) || 0;
+            const targetID = document.getElementById('receipt-id').textContent;
+           
+            const selectedMode = document.getElementById('payment-status-select').value;
+           
+            let adjNote = "";
+            if (currentRefRecord) {
+                if (refDebtAdded > 0) adjNote = `Debt carried from ${currentRefRecord.id}`;
+                if (refCreditApplied > 0) adjNote = `Credit applied from ${currentRefRecord.id}`;
+                const oldIdx = salesHistory.findIndex(r => r.id === currentRefRecord.id);
+                if (oldIdx !== -1) {
+                    const oldRec = salesHistory[oldIdx];
+                    if (!oldRec.paymentLog) oldRec.paymentLog = [];
+                    oldRec.paymentLog.push({ ts: new Date().toISOString(), amount: oldRec.balance, method: `TRANSFERRED TO ${targetID}` });
+                    oldRec.balance = 0; oldRec.status = "CLEARED/TRANSFERRED";
+                    salesHistory[oldIdx] = oldRec;
+                }
+            }
+
+            const entry = {
+                id: targetID,
+                ts: new Date().toISOString(),
+                comp: document.getElementById('company-name').value || "SwiftBill",
+                compAddr: document.getElementById('company-address').value || "---",
+                compPhone: document.getElementById('company-phone').value || "---",
+                client: document.getElementById('cust-name').value || "WALK-IN CLIENT",
+                clientPhone: document.getElementById('cust-phone').value,
+                clientAddress: document.getElementById('cust-address').value,
+                items: JSON.parse(JSON.stringify(items)),
+                total,
+                paid: { total: paid, cash: pCash, pos: pPos, bank: pBank },
+                balance: bal,
+                curr: curr.symbol,
+                officer: document.getElementById('staff-name').value || 'ADMIN',
+                discount: discVal,
+                vat: vatVal,
+                status: selectedMode === 'NONE' ? 'NO PAYMENT' : (Math.abs(bal) <= 0.005 ? 'FULL PAYMENT' : (bal > 0 ? 'PART PAYMENT' : 'CREDIT CREATED')),
+                paymentLog: paid > 0 ? [{ ts: new Date().toISOString(), amount: paid, method: "INITIAL PAYMENT" }] : [],
+                adjustmentNote: adjNote,
+                refDebtAdded,
+                refCreditApplied
+            };
+           
+            salesHistory.unshift(entry);
+            localStorage.setItem(DB_KEY, JSON.stringify(salesHistory));
+            showToast("Transaction Saved Successfully");
+            document.getElementById('modal-confirm-btn').classList.add('hidden');
+            needsResetAfterSave = true;
+            updateCustomerSuggestions();
+        }
+
+        function closeModal() { document.getElementById('confirm-modal').classList.add('hidden'); if (needsResetAfterSave) { resetGenerator(); needsResetAfterSave = false; } }
+
+        function resetGenerator() {
+            items = []; addItemRow();
+            const ids = ['cust-name', 'cust-phone', 'cust-address', 'discount-percent', 'discount-value', 'vat-percent', 'paid-cash', 'paid-pos', 'paid-bank', 'staff-name', 'ref-receipt-id'];
+            ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            currentRefRecord = null;
+            document.getElementById('use-available-credit').checked = false;
+            document.getElementById('credit-toggle-container').classList.add('hidden');
+            document.getElementById('payment-status-select').value = 'FULL';
+            togglePaymentMode();
+            updateReceiptID();
+            const bFooter = document.getElementById('business-footer'); if (bFooter) bFooter.value = businessFooterNote;
+            updatePreview();
+        }
+
+        function setTodayFilter() { const today = new Date().toISOString().split('T')[0]; safeSetValue('record-date-from', today); safeSetValue('record-date-to', today); safeSetValue('expense-date', today); safeSetValue('expense-range-from', today); safeSetValue('expense-range-to', today); safeSetValue('cds-range-from', today); safeSetValue('cds-range-to', today); }
+
+        function renderHistory() {
+            const body = document.getElementById('sales-records-body'); const q = document.getElementById('record-search').value.toLowerCase();
+            const from = document.getElementById('record-date-from').value; const to = document.getElementById('record-date-to').value;
+            const filtered = salesHistory.filter(r => { const d = r.ts.split('T')[0]; return ((!from || d >= from) && (!to || d <= to)) && (!q || [r.client, r.id, r.officer, r.status].some(s => s?.toLowerCase().includes(q))); });
+            if (body) {
+                body.innerHTML = ''; let rev = 0, cash = 0, pos = 0, bank = 0, vat = 0, disc = 0, debt = 0;
+                const currCode = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN'; const curr = worldCurrencies.find(c => c.code === currCode) || worldCurrencies[0];
+                filtered.forEach((r, idx) => {
+                    rev += r.total; cash += (r.paid?.cash || 0); pos += (r.paid?.pos || 0); bank += (r.paid?.bank || 0); vat += (r.vat || 0); disc += (r.discount || 0); debt += Math.max(0, (r.balance || 0));
+                    const tr = document.createElement('tr'); tr.className = "border-t border-slate-100";
+                    tr.innerHTML = `<td class="text-center opacity-40">${idx + 1}</td><td class="whitespace-nowrap">${new Date(r.ts).toLocaleString('en-GB')}</td><td class="font-black">${r.id}</td><td class="uppercase font-black">${r.client}</td><td class="text-rose-400">${curr.symbol}${formatCurrencyDisplay(r.discount)}</td><td class="text-orange-400">${curr.symbol}${formatCurrencyDisplay(r.vat)}</td><td class="font-black bg-indigo-50/50">${curr.symbol}${formatCurrencyDisplay(r.total)}</td><td class="text-emerald-600 font-bold bg-emerald-50/50">${curr.symbol}${formatCurrencyDisplay(r.paid?.total || 0)}</td><td class="text-rose-600 font-black bg-rose-50/50">${r.balance > 0.005 ? curr.symbol + formatCurrencyDisplay(r.balance) : (r.balance < -0.005 ? 'CR: ' + formatCurrencyDisplay(Math.abs(r.balance)) : '—')}</td><td class="uppercase text-[9px] opacity-60">C:${(r.paid?.cash || 0).toFixed(0)} | P:${(r.paid?.pos || 0).toFixed(0)} | T:${(r.paid?.bank || 0).toFixed(0)}</td><td><span class="px-2 py-0.5 rounded-full text-[8px] font-black ${Math.abs(r.balance) <= 0.005 ? 'bg-emerald-100 text-emerald-700' : (r.status === 'NO PAYMENT' ? 'bg-rose-100 text-rose-700' : 'bg-orange-100 text-orange-700')}">${r.status}</span></td><td class="uppercase">${r.officer}</td><td class="no-print"><div class="flex gap-1 justify-center"><button onclick="reproduceReceipt('${r.id}')" class="bg-indigo-600 text-white p-1.5 rounded text-[8px] font-black">RECEIPT</button></div></td>`;
+                    body.appendChild(tr);
+                });
+                safeSetText('stats-revenue', `${curr.symbol}${formatCurrencyDisplay(rev)}`); safeSetText('stats-cash', `${curr.symbol}${formatCurrencyDisplay(cash)}`); safeSetText('stats-pos', `${curr.symbol}${formatCurrencyDisplay(pos)}`); safeSetText('stats-bank', `${curr.symbol}${formatCurrencyDisplay(bank)}`); safeSetText('stats-vat', `${curr.symbol}${formatCurrencyDisplay(vat)}`); safeSetText('stats-discount', `${curr.symbol}${formatCurrencyDisplay(disc)}`); safeSetText('stats-debt', `${curr.symbol}${formatCurrencyDisplay(debt)}`); safeSetText('stats-count', filtered.length);
+            }
+        }
+
+        function exportSalesCSV() { const q = document.getElementById('record-search').value.toLowerCase(); const from = document.getElementById('record-date-from').value; const to = document.getElementById('record-date-to').value; const filtered = salesHistory.filter(r => { const d = r.ts.split('T')[0]; return ((!from || d >= from) && (!to || d <= to)) && (!q || [r.client, r.id, r.officer, r.status].some(s => s?.toLowerCase().includes(q))); }); const rows = [["S/N", "Date & Time", "Receipt #", "Customer Name", "Discount", "VAT", "Total Amount", "Amount Paid", "Balance Left", "Method", "Account Status", "Staff Name"]]; filtered.forEach((r, idx) => { rows.push([idx + 1, new Date(r.ts).toLocaleString('en-GB'), r.id, r.client, r.discount, r.vat, r.total, r.paid?.total || 0, r.balance, `C:${(r.paid?.cash || 0)} P:${(r.paid?.pos || 0)} T:${(r.paid?.bank || 0)}`, r.status, r.officer]); }); downloadCSV(`Sales_Records_${Date.now()}.csv`, rows); }
+
+        function exportCreditsCSV() { const list = salesHistory.filter(r => Math.abs(r.balance) > 0.005); const rows = [["Customer Name", "Receipt #", "Total Purchase", "Amount Paid", "Outstanding Balance", "Credit Balance", "Last Active"]]; list.forEach(d => { rows.push([d.client, d.id, d.total, d.paid.total, d.balance > 0.005 ? d.balance : 0, d.balance < -0.005 ? Math.abs(d.balance) : 0, new Date(d.ts).toLocaleDateString('en-GB')]); }); downloadCSV(`Debt_Records_${Date.now()}.csv`, rows); }
+
+        function downloadCSV(filename, rows) { let csvContent = rows.map(r => r.map(cell => `"${(cell ?? "").toString().replace(/"/g, '""')}"`).join(",")).join("\n"); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", filename); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); }
+
+        function openStatementModal(clientName) {
+            const history = salesHistory.filter(x => x.client.toUpperCase() === clientName.toUpperCase());
+            if(!history.length) return showToast("No history found.");
+            const first = history[0]; safeSetText('stmt-cust-name', clientName.toUpperCase()); safeSetText('stmt-cust-phone', first.clientPhone || '---'); safeSetText('stmt-cust-address', first.clientAddress || '---'); safeSetText('stmt-comp-name-display', (document.getElementById('company-name').value || "SwiftBill").toUpperCase());
+            const body = document.getElementById('stmt-body');
+            if (body) {
+                body.innerHTML = ''; let events = [];
+                history.forEach(sale => {
+                    events.push({ ts: sale.ts, ref: sale.id, summary: "PURCHASE: " + sale.items.map(i => i.desc).join(', '), debit: sale.total, credit: 0 });
+                    if (sale.paymentLog && sale.paymentLog.length > 0) { sale.paymentLog.forEach(p => { events.push({ ts: p.ts, ref: sale.id, summary: "PAYMENT: " + (p.method || "INSTALLMENT"), debit: 0, credit: p.amount }); }); }
+                    else if (sale.paid && sale.paid.total > 0) { events.push({ ts: sale.ts, ref: sale.id, summary: "PAYMENT: INITIAL", debit: 0, credit: sale.paid.total }); }
+                });
+                events.sort((a, b) => new Date(a.ts) - new Date(b.ts));
+                let runningBal = 0; const currCode = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN'; const curr = worldCurrencies.find(c => c.code === currCode) || worldCurrencies[0];
+                events.forEach(ev => {
+                    runningBal += (ev.debit - ev.credit); const tr = document.createElement('tr');
+                    tr.innerHTML = `<td class="px-6 py-4">${new Date(ev.ts).toLocaleString('en-GB')}</td><td class="font-black text-indigo-900">${ev.ref}</td><td class="truncate max-w-[250px] uppercase font-bold text-[9px] text-slate-600">${ev.summary}</td><td class="text-right text-rose-600 font-bold">${ev.debit > 0 ? curr.symbol + formatCurrencyDisplay(ev.debit) : '—'}</td><td class="text-right text-emerald-600 font-bold">${ev.credit > 0 ? curr.symbol + formatCurrencyDisplay(ev.credit) : '—'}</td><td class="text-right px-6 font-black ${runningBal > 0.005 ? 'text-rose-800' : (runningBal < -0.005 ? 'text-emerald-800' : 'text-slate-400')} bg-slate-50/50">${curr.symbol}${formatCurrencyDisplay(Math.abs(runningBal))} ${runningBal < -0.005 ? '(CR)' : ''}</td>`;
+                    body.appendChild(tr);
+                });
+            }
+            document.getElementById('statement-modal').classList.remove('hidden');
+        }
+
+        function renderCustomerDB() {
+            const body = document.getElementById('customer-db-body'); const searchQ = document.getElementById('customer-db-search')?.value.toLowerCase() || ''; const grouped = getGroupedCustomers(); const currCode = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN'; const curr = worldCurrencies.find(c => c.code === currCode) || worldCurrencies[0];
+            if (body) { body.innerHTML = Object.values(grouped).filter(c => !searchQ || c.name.toLowerCase().includes(searchQ) || (c.phone && c.phone.includes(searchQ))).map(c => `<tr><td class="py-4 px-4 uppercase font-black">${c.name}</td><td>${c.phone || '---'}</td><td class="italic text-slate-500">${c.address || '---'}</td><td class="text-right font-black text-indigo-600">${curr.symbol}${formatCurrencyDisplay(c.spent)}</td><td class="text-center"><button onclick="openStatementModal('${c.name.replace(/'/g, "\\'")}')" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[10px] uppercase font-black">History</button></td></tr>`).join(''); }
+            safeSetText('cust-er-biz-name', (document.getElementById('company-name').value || "SwiftBill Business").toUpperCase()); safeSetText('cust-er-gen-date-val', new Date().toLocaleString('en-GB'));
+        }
+
+        function exportCustomerCSV() { const grouped = getGroupedCustomers(); const currCode = localStorage.getItem(SELECTED_CURR_KEY) || 'NGN'; const curr = worldCurrencies.find(c => c.code === currCode) || worldCurrencies[0]; let rows = [["Customer Name", "Phone", "Address", `Total Amount Spent (${curr.code})`]]; Object.values(grouped).forEach(c => { rows.push([c.name, c.phone || '---', c.address || '---', c.spent.toFixed(2)]); }); downloadCSV(`Customer_Database_${Date.now()}.csv`, rows); }
+
+        function reproduceReceipt(id) {
+            const r = salesHistory.find(x => x.id === id); if (!r) return;
+            const zone = document.getElementById('reprint-invisible-zone'); if (!zone) return; zone.innerHTML = '';
+            const paper = document.getElementById('receipt-paper').cloneNode(true); paper.id = "reprint-capture-el"; paper.classList.remove('receipt-shadow');
+            paper.querySelector('#prev-company-name-display').textContent = (r.comp || "SwiftBill").toUpperCase(); paper.querySelector('#prev-company-address-display').textContent = (r.compAddr || "").toUpperCase(); paper.querySelector('#prev-company-phone-display').textContent = (r.compPhone || "").toUpperCase();
+           
+            const staffName = r.officer || "ADMIN STAFF";
+            paper.querySelector('#prev-served-by-name').textContent = staffName.toUpperCase();
+           
+            paper.querySelector('#receipt-id').textContent = r.id; paper.querySelector('#prev-cust-name').textContent = r.client.toUpperCase(); paper.querySelector('#prev-total').textContent = `${r.curr}${formatCurrencyDisplay(r.total)}`; paper.querySelector('#prev-paid-val').textContent = `${r.curr}${formatCurrencyDisplay(r.paid?.total || 0)}`;
+           
+            // Populate breakdown for reprint
+            const cashRow = paper.querySelector('#prev-breakdown-cash-row');
+            const posRow = paper.querySelector('#prev-breakdown-pos-row');
+            const bankRow = paper.querySelector('#prev-breakdown-bank-row');
+            const p = r.paid || { cash: 0, pos: 0, bank: 0, total: 0 };
+           
+            if (p.total > 0) {
+                paper.querySelector('#prev-breakdown-cash-val').textContent = `${r.curr}${formatCurrencyDisplay(p.cash)}`;
+                paper.querySelector('#prev-breakdown-pos-val').textContent = `${r.curr}${formatCurrencyDisplay(p.pos)}`;
+                paper.querySelector('#prev-breakdown-bank-val').textContent = `${r.curr}${formatCurrencyDisplay(p.bank)}`;
+                cashRow.classList.toggle('hidden', (p.cash || 0) <= 0);
+                posRow.classList.toggle('hidden', (p.pos || 0) <= 0);
+                bankRow.classList.toggle('hidden', (p.bank || 0) <= 0);
+            } else {
+                cashRow.classList.add('hidden'); posRow.classList.add('hidden'); bankRow.classList.add('hidden');
+            }
+
+            const rbRow = paper.querySelector('#prev-ref-balance-row');
+            const rcRow = paper.querySelector('#prev-ref-credit-row');
+            const adjRow = paper.querySelector('#prev-adjustment-row');
+            const balRow = paper.querySelector('#prev-bal-row');
+            const creditRow = paper.querySelector('#prev-credit-row');
+
+            if (r.refDebtAdded > 0) {
+                paper.querySelector('#prev-ref-balance-val').textContent = `${r.curr}${formatCurrencyDisplay(r.refDebtAdded)}`;
+                rbRow.classList.remove('hidden');
+                paper.querySelector('#prev-adjustment-val').textContent = `+${r.curr}${formatCurrencyDisplay(r.refDebtAdded)} (Added)`;
+                adjRow.classList.remove('hidden');
+            }
+            if (r.refCreditApplied > 0) {
+                paper.querySelector('#prev-ref-credit-val').textContent = `${r.curr}${formatCurrencyDisplay(r.refCreditApplied)}`;
+                rcRow.classList.remove('hidden');
+                paper.querySelector('#prev-adjustment-val').textContent = `-${r.curr}${formatCurrencyDisplay(r.refCreditApplied)} (Deducted)`;
+                adjRow.classList.remove('hidden');
+            }
+
+            if (r.balance > 0.005) { paper.querySelector('#prev-bal-val').textContent = `${r.curr}${formatCurrencyDisplay(r.balance)}`; balRow.classList.remove('hidden'); creditRow.classList.add('hidden'); }
+            else if (r.balance < -0.005) { paper.querySelector('#prev-credit-val').textContent = `${r.curr}${formatCurrencyDisplay(Math.abs(r.balance))}`; creditRow.classList.remove('hidden'); balRow.classList.add('hidden'); }
+            else { balRow.classList.add('hidden'); creditRow.classList.add('hidden'); }
+           
+            const list = paper.querySelector('#prev-items-list'); if (list) { list.innerHTML = r.items.map(i => `<div class="grid grid-cols-12 py-2 text-[8px] font-bold border-b"><div class="col-span-6 truncate uppercase">${i.desc}</div><div class="col-span-2 text-center">${i.qty}</div><div class="col-span-4 text-right">${r.curr}${formatCurrencyDisplay(parseFloat(i.price)*parseFloat(i.qty))}</div></div>`).join(''); }
+            const pill = paper.querySelector('#prev-payment-pill');
+            if (pill) {
+                if (r.balance > 0.005) { pill.textContent = 'PART PAYMENT'; pill.className = "text-[6px] font-black uppercase px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full border"; }
+                else if (r.balance < -0.005) { pill.textContent = 'OVERPAYMENT / CREDIT'; pill.className = "text-[6px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border"; }
+                else if (p.total <= 0) { pill.textContent = 'NO PAYMENT'; pill.className = "text-[6px] font-black uppercase px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full border"; }
+                else { pill.textContent = 'PAID'; pill.className = "text-[6px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border"; }
+            }
+            let methods = []; if (p.cash > 0) methods.push("CASH"); if (p.pos > 0) methods.push("POS"); if (p.bank > 0) methods.push("BANK TRANSFER");
+            paper.querySelector('#prev-payment-method').textContent = "METHOD: " + (methods.join(" / ") || "---");
+            zone.appendChild(paper); const modalContent = document.getElementById('reprint-modal-content'); if (modalContent) { modalContent.innerHTML = ''; modalContent.appendChild(paper.cloneNode(true)); }
+            document.getElementById('reprint-modal').classList.remove('hidden');
+        }
+
+        function removeBranding(type) {
+            branding[type] = null;
+            localStorage.setItem(BRANDING_KEY, JSON.stringify(branding));
+            const uploadEl = document.getElementById(`${type}-upload`);
+            if (uploadEl) uploadEl.value = '';
+            updatePreview();
+            updateBrandingUI();
+            showToast(`${type.toUpperCase()} Removed`);
+        }
+
+        function updateBrandingUI() {
+            const logoBtn = document.getElementById('remove-logo-btn');
+            const sigBtn = document.getElementById('remove-sig-btn');
+            if (logoBtn) logoBtn.classList.toggle('hidden', !branding.logo);
+            if (sigBtn) sigBtn.classList.toggle('hidden', !branding.sig);
+        }
+
+        function scrollActiveTable(dir) { const activeMap = { 'records': 'records-table-wrapper', 'credits': 'debt-table-wrapper', 'customers': 'customers-table-wrapper' }; const wrapperId = activeMap[activeTab]; if (wrapperId) { const el = document.getElementById(wrapperId); if (el) el.scrollBy({ left: dir * 400, behavior: 'smooth' }); } }
+
+        window.downloadPNG = async (id, type, cust = '') => { const el = document.getElementById(id); if (!el) return; el.classList.add('capture-preparing'); await new Promise(r => setTimeout(r, 150)); const canvas = await html2canvas(el, { scale: 2.5, useCORS: true }); el.classList.remove('capture-preparing'); const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = `${type}_${cust}_${Date.now()}.png`; link.click(); };
+        window.downloadPDF = async (id, type, cust = '') => { const el = document.getElementById(id); if (!el) return; el.classList.add('capture-preparing'); await new Promise(r => setTimeout(r, 150)); const canvas = await html2canvas(el, { scale: 2.5, useCORS: true }); el.classList.remove('capture-preparing'); const imgData = canvas.toDataURL('image/jpeg', 0.95); const pdf = new jspdf.jsPDF({ orientation: canvas.width > canvas.height ? 'l' : 'p', unit: 'px', format: [canvas.width, canvas.height] }); pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height); pdf.save(`${type}_${cust}_${Date.now()}.pdf`); };
+        window.shareOnPhone = async (id, type, cust = '') => { const el = document.getElementById(id); if (!el) return; const canvas = await html2canvas(el, { scale: 2 }); canvas.toBlob(async blob => { const file = new File([blob], 'SwiftBill_Report.png', { type: 'image/png' }); if (navigator.share) { navigator.share({ files: [file], title: 'SwiftBill Business Report' }).catch(()=>{}); } else { showToast("Sharing not supported on this browser."); } }); };
+
+        function numberToWords(n) {
+            if (n === 0) return 'Zero';
+            const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+            const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+            const g = ['', 'Thousand', 'Million', 'Billion', 'Trillion'];
+            const makeGroup = ([h, t, o]) => [ h != 0 ? (a[h] + ' Hundred') : '', t != 0 ? (t == 1 ? a[10 + parseInt(o)] : b[t]) : '', (t != 1 && o != 0) ? a[o] : '' ].filter(Boolean).join(' ');
+            let words = []; let nStr = Math.floor(n).toString();
+            for (let i = nStr.length, j = 0; i > 0; i -= 3, j++) { let chunk = parseInt(nStr.substring(Math.max(0, i - 3), i)); if (chunk > 0) words.push(makeGroup(chunk.toString().padStart(3, '0').split('').map(Number)) + (g[j] ? ' ' + g[j] : '')); }
+            return words.reverse().filter(Boolean).join(' ');
+        }
+
+        window.onload = () => { populateCurrencySelect(); setTodayFilter(); resetGenerator(); updateCustomerSuggestions(); updateBrandingUI(); };
+        function updateLiveClock() { const now = new Date(); const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }); const dateStr = now.toLocaleDateString('en-GB'); const c = document.getElementById('live-clock'); if(c) c.textContent = timeStr; const d = document.getElementById('live-date'); if(d) d.textContent = dateStr; }
+        setInterval(updateLiveClock, 1000); updateLiveClock();
+        function saveFooterState() { const f = document.getElementById('business-footer'); if (f) { businessFooterNote = f.value; localStorage.setItem(FOOTER_STATE_KEY, businessFooterNote); updatePreview(); } }
+    </script>
+
+    <div id="confirm-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+            <div class="p-4 border-b flex justify-between items-center bg-indigo-50/30"><h3 class="text-sm font-black uppercase text-indigo-900">Transaction Final Review</h3><button onclick="closeModal()" class="p-2 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>
+            <div class="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-100/50 flex justify-center items-start" id="modal-content"></div>
+            <div class="p-6 bg-white border-t flex flex-col gap-4">
+                <button id="modal-confirm-btn" onclick="handleConfirmSaveActual();" class="w-full py-4 bg-emerald-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg">Confirm & Save Transaction</button>
+                <div id="post-confirm-actions" class="grid grid-cols-4 gap-2">
+                    <button onclick="window.downloadPNG('modal-receipt-capture', 'Payment Receipt', document.getElementById('cust-name').value);" class="px-2 py-3 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest">PNG</button>
+                    <button onclick="window.downloadPDF('modal-receipt-capture', 'Payment Receipt', document.getElementById('cust-name').value);" class="px-2 py-3 bg-rose-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest">PDF</button>
+                    <button onclick="window.shareOnPhone('modal-receipt-capture', 'Payment Receipt', document.getElementById('cust-name').value);" class="px-2 py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest">Share</button>
+                    <button onclick="window.print();" class="px-2 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest">Print</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="reprint-modal" class="fixed inset-0 z-[120] hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden h-[90vh] flex flex-col">
+            <div class="p-6 border-b flex justify-between items-center bg-indigo-50/30 no-print"><h3 class="text-lg font-black uppercase text-indigo-950">Reprint Payment Receipt</h3><button onclick="document.getElementById('reprint-modal').classList.add('hidden')" class="p-2 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>
+            <div class="flex-1 overflow-y-auto p-8 bg-white flex justify-center items-start" id="reprint-modal-content"></div>
+            <div class="p-6 bg-slate-50 border-t grid grid-cols-4 gap-3 no-print">
+                <button onclick="window.downloadPNG('reprint-modal-content', 'Payment Receipt');" class="px-2 py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest">PNG</button>
+                <button onclick="window.downloadPDF('reprint-modal-content', 'Payment Receipt');" class="px-2 py-3 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest">PDF</button>
+                <button onclick="window.shareOnPhone('reprint-modal-content', 'Payment Receipt');" class="px-2 py-3 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest">Share</button>
+                <button onclick="window.print();" class="px-2 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest">Print</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="currency-modal" class="fixed inset-0 z-[150] hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden">
+            <div class="p-6 border-b flex justify-between items-center bg-indigo-50/30"><h3 class="text-lg font-black uppercase text-indigo-950">Add Currency</h3><button onclick="toggleCurrencyModal(false)" class="p-2 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>
+            <div class="p-8 space-y-4">
+                <div><label class="text-[10px] font-black uppercase text-slate-400 block mb-1">Currency Name</label><input type="text" id="new-curr-name" placeholder="e.g. Euro" class="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold text-sm outline-none"></div>
+                <div><label class="text-[10px] font-black uppercase text-slate-400 block mb-1">Currency Code</label><input type="text" id="new-curr-code" placeholder="e.g. EUR" class="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold text-sm outline-none"></div>
+                <div><label class="text-[10px] font-black uppercase text-slate-400 block mb-1">Symbol</label><input type="text" id="new-curr-symbol" placeholder="e.g. €" class="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold text-sm outline-none"></div>
+                <div><label class="text-[10px] font-black uppercase text-slate-400 block mb-1">Fractional Unit</label><input type="text" id="new-curr-fraction" placeholder="e.g. Cents" class="w-full bg-slate-50 border rounded-xl px-4 py-3 font-bold text-sm outline-none"></div>
+            </div>
+            <div class="p-6 bg-slate-50 border-t flex flex-col gap-3"><button onclick="addNewCurrency()" class="w-full py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg">Save Currency</button></div>
+        </div>
+    </div>
+
+    <div id="statement-modal" class="fixed inset-0 z-[130] hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white w-full max-w-5xl rounded-[2.5rem] shadow-2xl overflow-hidden h-[90vh] flex flex-col">
+            <div class="p-6 border-b flex justify-between items-center bg-indigo-50/30"><h3 class="text-lg font-black uppercase text-indigo-950">STATEMENT OF ACCOUNT</h3><button onclick="document.getElementById('statement-modal').classList.add('hidden')" class="p-2 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>
+            <div class="flex-1 overflow-y-auto p-12 bg-white" id="statement-paper">
+                <div class="text-center mb-8"><h2 id="stmt-comp-name-display" class="text-3xl font-black text-indigo-900 uppercase">SWIFTBILL BY PRUDENZ</h2><p class="text-[10px] font-black tracking-widest opacity-50 uppercase">Account Ledger</p></div>
+                <div class="grid grid-cols-2 gap-10 mb-8 pb-8 border-b"><div><span class="text-[9px] font-black uppercase text-indigo-400">Statement For</span><h3 id="stmt-cust-name" class="text-xl font-black uppercase">---</h3><div id="stmt-cust-phone" class="text-sm font-bold opacity-60">---</div><div id="stmt-cust-address" class="text-xs opacity-50 mt-1">---</div></div></div>
+                <table class="w-full text-left text-xs"><thead class="bg-slate-50 border-y"><tr><th class="px-6 py-4">Date/Time</th><th>Ref #</th><th>Summary</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right px-6">Balance</th></tr></thead><tbody id="stmt-body" class="divide-y"></tbody></table>
+            </div>
+            <div class="p-6 bg-slate-50 border-t flex gap-4 no-print"><button onclick="window.downloadPNG('statement-paper', 'Statement')" class="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg">PNG</button><button onclick="window.downloadPDF('statement-paper', 'Statement')" class="flex-1 py-4 bg-rose-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg">PDF</button><button onclick="window.print()" class="flex-1 py-4 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg">Print</button></div>
+        </div>
+    </div>
+
+</body>
+</html>
